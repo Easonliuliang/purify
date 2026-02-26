@@ -4,8 +4,8 @@
 # 用法: ./deploy.sh <VPS_IP> [SSH_USER]
 #
 # 示例:
-#   ./deploy.sh 142.171.248.238
-#   ./deploy.sh 142.171.248.238 ubuntu
+#   ./deploy.sh YOUR_VPS_IP
+#   ./deploy.sh YOUR_VPS_IP ubuntu
 #
 set -euo pipefail
 
