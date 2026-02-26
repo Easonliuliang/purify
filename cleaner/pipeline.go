@@ -3,6 +3,8 @@ package cleaner
 import (
 	"math"
 
+	readability "github.com/go-shiori/go-readability"
+
 	"github.com/JohannesKaufmann/html-to-markdown/v2/converter"
 	"github.com/use-agent/purify/models"
 )
@@ -34,12 +36,18 @@ func NewCleaner() *Cleaner {
 //  3. Stage 2: convert to the requested output format.
 //  4. Estimate cleaned tokens and compute savings.
 //  5. Assemble and return the partial response.
-func (c *Cleaner) Clean(rawHTML string, sourceURL string, format string) (*models.ScrapeResponse, error) {
+func (c *Cleaner) Clean(rawHTML string, sourceURL string, format string, extractMode string) (*models.ScrapeResponse, error) {
 	// ── 1. Original token estimate ──────────────────────────────────
 	originalTokens := EstimateTokens(rawHTML)
 
-	// ── 2. Stage 1: Readability extraction ──────────────────────────
-	article, _ := ExtractContent(rawHTML, sourceURL)
+	// ── 2. Stage 1: Content extraction ──────────────────────────────
+	var article readability.Article
+	if extractMode == "raw" {
+		// Skip readability; use the full rendered HTML as-is.
+		article = fallbackArticle(rawHTML)
+	} else {
+		article, _ = ExtractContent(rawHTML, sourceURL)
+	}
 
 	// ── 3. Stage 2: Format conversion ───────────────────────────────
 	var content string

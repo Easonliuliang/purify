@@ -51,7 +51,7 @@ func Scrape(sc *scraper.Scraper, cl *cleaner.Cleaner) gin.HandlerFunc {
 
 		// ── 3. Clean ────────────────────────────────────────────────
 		cleanStart := time.Now()
-		resp, err := cl.Clean(rawHTML, req.URL, req.OutputFormat)
+		resp, err := cl.Clean(rawHTML, req.URL, req.OutputFormat, req.ExtractMode)
 		cleaningMs := time.Since(cleanStart).Milliseconds()
 
 		if err != nil {

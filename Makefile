@@ -1,4 +1,4 @@
-.PHONY: build run clean dev test lint
+.PHONY: build build-mcp run clean dev test lint
 
 # Binary output
 BINARY := bin/purify
@@ -10,6 +10,11 @@ build:
 	@echo "Building purify..."
 	@mkdir -p bin
 	go build -ldflags "$(LDFLAGS)" -o $(BINARY) ./cmd/purify
+
+build-mcp:
+	@echo "Building purify-mcp..."
+	@mkdir -p bin
+	go build -ldflags "$(LDFLAGS)" -o bin/purify-mcp ./cmd/purify-mcp
 
 run: build
 	@echo "Starting purify..."

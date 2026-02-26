@@ -1,0 +1,4 @@
+bin/
+.git/
+*.md
+test_sites.py

@@ -1,0 +1,26 @@
+services:
+  purify:
+    build: .
+    container_name: purify
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      # ── Server ──
+      PURIFY_MODE: release
+      PURIFY_MAX_PAGES: "10"
+      # ── Auth (generate a strong key: openssl rand -hex 32) ──
+      PURIFY_AUTH_ENABLED: "true"
+      PURIFY_API_KEYS: "${PURIFY_API_KEYS}"
+      # ── Rate limit ──
+      PURIFY_RATE_RPS: "5"
+      PURIFY_RATE_BURST: "10"
+      # ── Logging ──
+      PURIFY_LOG_LEVEL: info
+    # SHM size for Chromium (default 64MB too small, causes crashes).
+    shm_size: 512m
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 4g
