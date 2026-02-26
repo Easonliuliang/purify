@@ -21,14 +21,21 @@ Purify strips navigation, ads, scripts, and styling — keeping only the content
 
 | Website | Raw HTML Tokens | After Purify | Savings | Time |
 |---|---|---|---|---|
+| Xiaohongshu (RedNote) post | 158,742 | 353 | **99.8%** | 1.0s |
 | sspai.com (少数派) | 32,895 | 187 | **99.4%** | 1.2s |
 | GitHub repo page | 103,954 | 1,391 | **98.7%** | 2.6s |
-| Next.js 15.2 blog | 87,231 | 4,271 | **95.1%** | 5.0s |
+| Next.js 15.2 blog (React SPA) | 87,231 | 4,271 | **95.1%** | 5.0s |
 | BBC News homepage | 65,804 | 6,160 | **90.6%** | 0.6s |
 | Wikipedia (Rust) | 312,973 | 77,202 | **75.3%** | 2.7s |
 | paulgraham.com | 26,204 | 23,241 | 11.3% | 2.1s |
 
 > paulgraham.com scores low because the page is already minimal — almost pure text with no cruft to remove. That's a feature, not a bug.
+
+### JS-Heavy & Login-Walled Sites
+
+Purify uses a real headless Chrome with stealth mode — it renders JavaScript, handles SPAs, and works with sites that block traditional scrapers.
+
+Tested successfully on: **Xiaohongshu (RedNote)**, **Baidu Baike**, **GitHub**, **Next.js apps**, and more. No cookies or browser extensions required — just pass the URL.
 
 ## Quick Start
 
