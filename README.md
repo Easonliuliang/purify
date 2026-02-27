@@ -1,5 +1,10 @@
 # Purify
 
+**[🌐 Get a free hosted API key →](https://purify-web.vercel.app)**
+Stop burning AI tokens on raw HTML. Spend $29/mo, save $5,000+ in LLM costs.
+
+---
+
 Web scraping & content cleaning API built for AI agents. Single binary, zero external dependencies.
 
 Turn any web page into clean, LLM-ready Markdown — with up to **99% token savings**.
@@ -180,6 +185,21 @@ Client → HTTP API (Gin) → Headless Chrome (Rod) → Raw HTML
 - **Scraper**: Rod-based headless Chrome with page pool, resource blocking (images/CSS/fonts), and stealth mode
 - **Cleaner**: Two-stage pipeline — Mozilla Readability for content extraction, then html-to-markdown for format conversion
 - **API**: Gin with API key auth, per-key rate limiting, health checks, and graceful shutdown
+
+## Cloud API
+
+Don't want to self-host? Use the managed Purify API — no setup, no maintenance, no infrastructure to manage.
+
+| Plan | Price | Requests / month | Concurrent |
+|---|---|---|---|
+| Free | $0 | 500 | 2 |
+| Pro | $29/mo | 50,000 | 10 |
+
+Both plans include the built-in MCP server.
+
+**[→ Get your free API key at purify-web.vercel.app](https://purify-web.vercel.app)**
+
+---
 
 ## License
 
