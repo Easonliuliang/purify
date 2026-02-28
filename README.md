@@ -60,20 +60,24 @@ Measured with [tiktoken](https://github.com/openai/tiktoken) (GPT-4 tokenizer). 
 
 | Website | Raw HTML | After Purify | Savings | Latency |
 |---|---|---|---|---|
-| BBC News homepage | 65,804 | 6,160 | **90.6%** | 0.6s |
-| Next.js blog (React SPA) | 87,231 | 4,271 | **95.1%** | 5.0s |
-| GitHub repo page | 103,954 | 1,391 | **98.7%** | 2.6s |
-| Wikipedia (Rust) | 312,973 | 77,202 | **75.3%** | 2.7s |
-| sspai.com | 32,895 | 187 | **99.4%** | 1.2s |
 | Xiaohongshu (RedNote) | 158,742 | 353 | **99.8%** | 1.0s |
+| sspai.com (少数派) | 32,895 | 187 | **99.4%** | 1.2s |
+| GitHub repo page | 99,181 | 1,370 | **98.6%** | 1.1s |
+| New York Times | 103,744 | 2,130 | **98.0%** | 1.1s |
+| Anthropic API Docs | 129,066 | 4,837 | **96.3%** | 1.8s |
+| Next.js blog (React SPA) | 87,231 | 4,271 | **95.1%** | 5.0s |
+| BBC News homepage | 97,540 | 6,969 | **92.9%** | 2.5s |
+| arXiv paper (DeepSeek-R1) | 26,684 | 3,129 | **88.3%** | 0.5s |
+| Wikipedia (LLM) | 245,276 | 76,325 | **68.9%** | 1.5s |
+| Hacker News | 11,708 | 5,572 | **52.4%** | 0.4s |
 
-> paulgraham.com (11.3% savings) is excluded because the page is already minimal — almost pure text with nothing to remove.
+> Low-savings sites (Hacker News, paulgraham.com) are already minimal — almost pure text with no cruft to remove. That's a feature, not a bug.
 
 ### JavaScript-heavy and login-walled sites
 
 Purify uses a real headless Chrome with stealth mode. It renders JavaScript, handles SPAs, and works with sites that block traditional scrapers.
 
-Tested on: **Xiaohongshu**, **Baidu Baike**, **GitHub**, **Next.js apps**, and more.
+Tested on: **Xiaohongshu**, **GitHub**, **New York Times**, **Anthropic Docs**, **arXiv**, **BBC News**, **Hacker News**, **Next.js apps**, and more.
 
 ## Use cases
 
