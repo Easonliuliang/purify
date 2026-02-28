@@ -60,12 +60,12 @@ Measured with [tiktoken](https://github.com/openai/tiktoken) (GPT-4 tokenizer). 
 
 | Website | Raw HTML | After Purify | Savings | Latency |
 |---|---|---|---|---|
-| Xiaohongshu (RedNote) | 158,742 | 353 | **99.8%** | 1.0s |
-| sspai.com | 32,895 | 187 | **99.4%** | 1.2s |
-| GitHub repo page | 103,954 | 1,391 | **98.7%** | 2.6s |
-| Next.js blog (React SPA) | 87,231 | 4,271 | **95.1%** | 5.0s |
 | BBC News homepage | 65,804 | 6,160 | **90.6%** | 0.6s |
+| Next.js blog (React SPA) | 87,231 | 4,271 | **95.1%** | 5.0s |
+| GitHub repo page | 103,954 | 1,391 | **98.7%** | 2.6s |
 | Wikipedia (Rust) | 312,973 | 77,202 | **75.3%** | 2.7s |
+| sspai.com | 32,895 | 187 | **99.4%** | 1.2s |
+| Xiaohongshu (RedNote) | 158,742 | 353 | **99.8%** | 1.0s |
 
 > paulgraham.com (11.3% savings) is excluded because the page is already minimal — almost pure text with nothing to remove.
 
