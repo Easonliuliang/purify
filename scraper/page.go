@@ -63,6 +63,7 @@ func (s *Scraper) doScrapeHTTP(ctx context.Context, req *models.ScrapeRequest) (
 
 	body, err := s.httpFetcher.fetch(ctx, req.URL, req.ProxyURL)
 	if err != nil {
+		slog.Info("HTTP fetch failed", "url", req.URL, "error", err)
 		return nil, categorizeError(err, "HTTP fetch failed")
 	}
 
