@@ -60,8 +60,6 @@ Measured with [tiktoken](https://github.com/openai/tiktoken) (GPT-4 tokenizer). 
 
 | Website | Raw HTML | After Purify | Savings | Latency |
 |---|---|---|---|---|
-| Xiaohongshu (RedNote) | 158,742 | 353 | **99.8%** | 1.0s |
-| sspai.com (少数派) | 32,895 | 187 | **99.4%** | 1.2s |
 | GitHub repo page | 99,181 | 1,370 | **98.6%** | 1.1s |
 | New York Times | 103,744 | 2,130 | **98.0%** | 1.1s |
 | Anthropic API Docs | 129,066 | 4,837 | **96.3%** | 1.8s |
@@ -70,6 +68,8 @@ Measured with [tiktoken](https://github.com/openai/tiktoken) (GPT-4 tokenizer). 
 | arXiv paper (DeepSeek-R1) | 26,684 | 3,129 | **88.3%** | 0.5s |
 | Wikipedia (LLM) | 245,276 | 76,325 | **68.9%** | 1.5s |
 | Hacker News | 11,708 | 5,572 | **52.4%** | 0.4s |
+| sspai.com (少数派) | 32,895 | 187 | **99.4%** | 1.2s |
+| Xiaohongshu (RedNote) | 158,742 | 353 | **99.8%** | 1.0s |
 
 > Low-savings sites (Hacker News, paulgraham.com) are already minimal — almost pure text with no cruft to remove. That's a feature, not a bug.
 
