@@ -29,6 +29,7 @@ type Metadata struct {
 	Author      string `json:"author,omitempty"`
 	Language    string `json:"language,omitempty"`
 	SourceURL   string `json:"source_url"`
+	FetchMethod string `json:"fetch_method,omitempty"`
 }
 
 // TokenInfo provides before/after token estimates to show cleaning efficacy.

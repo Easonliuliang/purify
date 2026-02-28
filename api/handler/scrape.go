@@ -38,7 +38,7 @@ func Scrape(sc *scraper.Scraper, cl *cleaner.Cleaner) gin.HandlerFunc {
 
 		// ── 2. Scrape ───────────────────────────────────────────────
 		navStart := time.Now()
-		rawHTML, jsTitle, err := sc.DoScrape(c.Request.Context(), &req)
+		result, err := sc.DoScrape(c.Request.Context(), &req)
 		navigationMs := time.Since(navStart).Milliseconds()
 
 		if err != nil {
@@ -51,7 +51,7 @@ func Scrape(sc *scraper.Scraper, cl *cleaner.Cleaner) gin.HandlerFunc {
 
 		// ── 3. Clean ────────────────────────────────────────────────
 		cleanStart := time.Now()
-		resp, err := cl.Clean(rawHTML, req.URL, req.OutputFormat, req.ExtractMode, req.CSSSelector)
+		resp, err := cl.Clean(result.HTML, req.URL, req.OutputFormat, req.ExtractMode, req.CSSSelector)
 		cleaningMs := time.Since(cleanStart).Milliseconds()
 
 		if err != nil {
@@ -64,12 +64,10 @@ func Scrape(sc *scraper.Scraper, cl *cleaner.Cleaner) gin.HandlerFunc {
 		}
 
 		// ── 4. Title fallback ───────────────────────────────────────
-		// Readability usually extracts a better title, but on fallback
-		// (raw-HTML passthrough) it will be empty. Use the JS-evaluated
-		// document.title as the safety net.
 		if resp.Metadata.Title == "" {
-			resp.Metadata.Title = jsTitle
+			resp.Metadata.Title = result.Title
 		}
+		resp.Metadata.FetchMethod = result.FetchMethod
 
 		// ── 5. Fill timing and respond ──────────────────────────────
 		resp.Timing = models.TimingInfo{

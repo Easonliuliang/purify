@@ -36,6 +36,12 @@ type ScrapeRequest struct {
 	// CSSSelector is an optional CSS selector to filter HTML before cleaning.
 	// When set, only the matched elements' outer HTML is passed to the pipeline.
 	CSSSelector string `json:"css_selector,omitempty"`
+
+	// FetchMode controls the fetching strategy.
+	// "auto" (default): try HTTP first, fall back to browser if JS is needed.
+	// "http": force pure HTTP (fastest, no JS rendering).
+	// "browser": force headless Chrome (current behavior).
+	FetchMode string `json:"fetch_mode,omitempty" binding:"omitempty,oneof=auto browser http"`
 }
 
 // Defaults applies default values to unset fields.
@@ -52,5 +58,8 @@ func (r *ScrapeRequest) Defaults() {
 	}
 	if r.ExtractMode == "" {
 		r.ExtractMode = "readability"
+	}
+	if r.FetchMode == "" {
+		r.FetchMode = "auto"
 	}
 }

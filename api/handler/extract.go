@@ -42,7 +42,7 @@ func Extract(sc *scraper.Scraper, cl *cleaner.Cleaner, llmClient *llm.Client) gi
 		scrapeReq.Defaults()
 
 		navStart := time.Now()
-		rawHTML, jsTitle, err := sc.DoScrape(c.Request.Context(), scrapeReq)
+		result, err := sc.DoScrape(c.Request.Context(), scrapeReq)
 		navigationMs := time.Since(navStart).Milliseconds()
 
 		if err != nil {
@@ -55,7 +55,7 @@ func Extract(sc *scraper.Scraper, cl *cleaner.Cleaner, llmClient *llm.Client) gi
 
 		// ── 3. Clean ────────────────────────────────────────────────
 		cleanStart := time.Now()
-		scrapeResp, err := cl.Clean(rawHTML, req.URL, req.OutputFormat, req.ExtractMode, req.CSSSelector)
+		scrapeResp, err := cl.Clean(result.HTML, req.URL, req.OutputFormat, req.ExtractMode, req.CSSSelector)
 		cleaningMs := time.Since(cleanStart).Milliseconds()
 
 		if err != nil {
@@ -69,12 +69,13 @@ func Extract(sc *scraper.Scraper, cl *cleaner.Cleaner, llmClient *llm.Client) gi
 
 		// Title fallback.
 		if scrapeResp.Metadata.Title == "" {
-			scrapeResp.Metadata.Title = jsTitle
+			scrapeResp.Metadata.Title = result.Title
 		}
+		scrapeResp.Metadata.FetchMethod = result.FetchMethod
 
 		// ── 4. LLM Extract ──────────────────────────────────────────
 		extractStart := time.Now()
-		result, err := llmClient.Extract(c.Request.Context(), scrapeResp.Content, req.Schema, llm.ExtractParams{
+		llmResult, err := llmClient.Extract(c.Request.Context(), scrapeResp.Content, req.Schema, llm.ExtractParams{
 			APIKey:  req.LLMAPIKey,
 			Model:   req.LLMModel,
 			BaseURL: req.LLMBaseURL,
@@ -94,7 +95,7 @@ func Extract(sc *scraper.Scraper, cl *cleaner.Cleaner, llmClient *llm.Client) gi
 		// ── 5. Assemble response ────────────────────────────────────
 		c.JSON(http.StatusOK, models.ExtractResponse{
 			Success:  true,
-			Data:     result.Data,
+			Data:     llmResult.Data,
 			Metadata: scrapeResp.Metadata,
 			Tokens:   scrapeResp.Tokens,
 			Timing: models.ExtractTimingInfo{
@@ -103,7 +104,7 @@ func Extract(sc *scraper.Scraper, cl *cleaner.Cleaner, llmClient *llm.Client) gi
 				CleaningMs:     cleaningMs,
 				ExtractionMs:   extractionMs,
 			},
-			LLMUsage: result.Usage,
+			LLMUsage: llmResult.Usage,
 		})
 	}
 }

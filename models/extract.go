@@ -45,6 +45,10 @@ type ExtractRequest struct {
 
 	// ProxyURL overrides the default proxy for this request.
 	ProxyURL string `json:"proxy_url,omitempty" binding:"omitempty,url"`
+
+	// FetchMode controls the fetching strategy.
+	// "auto" (default), "http", "browser".
+	FetchMode string `json:"fetch_mode,omitempty" binding:"omitempty,oneof=auto browser http"`
 }
 
 // Defaults applies default values to unset fields.
@@ -68,6 +72,9 @@ func (r *ExtractRequest) Defaults() {
 	if r.Timeout == 0 {
 		r.Timeout = 30
 	}
+	if r.FetchMode == "" {
+		r.FetchMode = "auto"
+	}
 }
 
 // ToScrapeRequest converts an ExtractRequest into a ScrapeRequest for reuse.
@@ -81,6 +88,7 @@ func (r *ExtractRequest) ToScrapeRequest() *ScrapeRequest {
 		OutputFormat:       r.OutputFormat,
 		ExtractMode:        r.ExtractMode,
 		CSSSelector:        r.CSSSelector,
+		FetchMode:          r.FetchMode,
 	}
 }
 
