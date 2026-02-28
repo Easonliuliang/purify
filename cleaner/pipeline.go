@@ -36,9 +36,22 @@ func NewCleaner() *Cleaner {
 //  3. Stage 2: convert to the requested output format.
 //  4. Estimate cleaned tokens and compute savings.
 //  5. Assemble and return the partial response.
-func (c *Cleaner) Clean(rawHTML string, sourceURL string, format string, extractMode string) (*models.ScrapeResponse, error) {
+func (c *Cleaner) Clean(rawHTML string, sourceURL string, format string, extractMode string, cssSelector string) (*models.ScrapeResponse, error) {
 	// ── 1. Original token estimate ──────────────────────────────────
 	originalTokens := EstimateTokens(rawHTML)
+
+	// ── 1.5. CSS selector filter (optional) ─────────────────────────
+	if cssSelector != "" {
+		filtered, err := ApplyCSSSelector(rawHTML, cssSelector)
+		if err != nil {
+			return nil, models.NewScrapeError(
+				models.ErrCodeInvalidInput,
+				"invalid CSS selector: "+err.Error(),
+				err,
+			)
+		}
+		rawHTML = filtered
+	}
 
 	// ── 2. Stage 1: Content extraction ──────────────────────────────
 	var article readability.Article

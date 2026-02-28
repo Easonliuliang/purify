@@ -32,6 +32,10 @@ type ScrapeRequest struct {
 	// "readability" (default): two-stage pipeline, readability extracts main body → format conversion.
 	// "raw": skip readability, pass full rendered HTML directly to format conversion.
 	ExtractMode string `json:"extract_mode,omitempty" binding:"omitempty,oneof=readability raw"`
+
+	// CSSSelector is an optional CSS selector to filter HTML before cleaning.
+	// When set, only the matched elements' outer HTML is passed to the pipeline.
+	CSSSelector string `json:"css_selector,omitempty"`
 }
 
 // Defaults applies default values to unset fields.

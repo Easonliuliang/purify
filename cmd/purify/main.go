@@ -13,6 +13,7 @@ import (
 	"github.com/use-agent/purify/api"
 	"github.com/use-agent/purify/cleaner"
 	"github.com/use-agent/purify/config"
+	"github.com/use-agent/purify/llm"
 	"github.com/use-agent/purify/scraper"
 )
 
@@ -40,9 +41,12 @@ func main() {
 	// ── 4. Initialise cleaner ───────────────────────────────────────
 	cl := cleaner.NewCleaner()
 
+	// ── 4.5. Initialise LLM client ─────────────────────────────────
+	llmClient := llm.NewClient(nil)
+
 	// ── 5. Setup router ─────────────────────────────────────────────
 	startTime := time.Now()
-	router := api.NewRouter(sc, cl, cfg, startTime)
+	router := api.NewRouter(sc, cl, llmClient, cfg, startTime)
 
 	// ── 6. Start HTTP server ────────────────────────────────────────
 	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)

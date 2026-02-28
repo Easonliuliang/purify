@@ -8,6 +8,7 @@ import (
 	"github.com/use-agent/purify/api/middleware"
 	"github.com/use-agent/purify/cleaner"
 	"github.com/use-agent/purify/config"
+	"github.com/use-agent/purify/llm"
 	"github.com/use-agent/purify/scraper"
 )
 
@@ -19,7 +20,7 @@ import (
 //	/scrape: Auth (if enabled) → RateLimit
 //
 // Health endpoint is intentionally outside auth so monitoring probes always work.
-func NewRouter(sc *scraper.Scraper, cl *cleaner.Cleaner, cfg *config.Config, startTime time.Time) *gin.Engine {
+func NewRouter(sc *scraper.Scraper, cl *cleaner.Cleaner, llmClient *llm.Client, cfg *config.Config, startTime time.Time) *gin.Engine {
 	gin.SetMode(cfg.Server.Mode)
 
 	r := gin.New()
@@ -38,6 +39,7 @@ func NewRouter(sc *scraper.Scraper, cl *cleaner.Cleaner, cfg *config.Config, sta
 	}
 	scrapeGroup.Use(middleware.RateLimit(cfg.RateLimit))
 	scrapeGroup.POST("/scrape", handler.Scrape(sc, cl))
+	scrapeGroup.POST("/extract", handler.Extract(sc, cl, llmClient))
 
 	return r
 }
