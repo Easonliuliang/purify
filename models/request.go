@@ -31,7 +31,7 @@ type ScrapeRequest struct {
 	// ExtractMode controls the content extraction strategy.
 	// "readability" (default): two-stage pipeline, readability extracts main body → format conversion.
 	// "raw": skip readability, pass full rendered HTML directly to format conversion.
-	ExtractMode string `json:"extract_mode,omitempty" binding:"omitempty,oneof=readability raw"`
+	ExtractMode string `json:"extract_mode,omitempty" binding:"omitempty,oneof=readability raw pruning auto"`
 
 	// Headers sets custom HTTP headers for the request.
 	// Example: {"Authorization": "Bearer xxx", "Accept-Language": "en-US"}

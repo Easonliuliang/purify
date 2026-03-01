@@ -1,8 +1,12 @@
 package cleaner
 
 import (
+	"log/slog"
 	"math"
+	"strings"
+	"sync"
 
+	"github.com/PuerkitoBio/goquery"
 	readability "github.com/go-shiori/go-readability"
 
 	"github.com/JohannesKaufmann/html-to-markdown/v2/converter"
@@ -55,10 +59,40 @@ func (c *Cleaner) Clean(rawHTML string, sourceURL string, format string, extract
 
 	// ── 2. Stage 1: Content extraction ──────────────────────────────
 	var article readability.Article
-	if extractMode == "raw" {
+	switch extractMode {
+	case "raw":
 		// Skip readability; use the full rendered HTML as-is.
 		article = fallbackArticle(rawHTML)
-	} else {
+
+	case "pruning":
+		// Scoring-based content extraction.
+		prunedHTML, err := PruneContent(rawHTML, sourceURL)
+		if err != nil {
+			slog.Warn("pruning: extraction failed, falling back to raw HTML",
+				"url", sourceURL, "error", err,
+			)
+			prunedHTML = rawHTML
+		}
+		// Build an Article from pruned HTML. Metadata comes from
+		// readability on the original HTML so we get title/author/etc.
+		metaArticle, _ := ExtractContent(rawHTML, sourceURL)
+		article = readability.Article{
+			Title:       metaArticle.Title,
+			Byline:      metaArticle.Byline,
+			Excerpt:     metaArticle.Excerpt,
+			SiteName:    metaArticle.SiteName,
+			Language:    metaArticle.Language,
+			Content:     prunedHTML,
+			TextContent: stripTags(prunedHTML),
+		}
+
+	case "auto":
+		// Run both readability and pruning concurrently, pick the
+		// result with more extracted text content.
+		article = autoExtract(rawHTML, sourceURL)
+
+	default:
+		// "readability" (default).
 		article, _ = ExtractContent(rawHTML, sourceURL)
 	}
 
@@ -132,4 +166,83 @@ func (c *Cleaner) Clean(rawHTML string, sourceURL string, format string, extract
 		// Timing, StatusCode, FinalURL are left zero-valued.
 		// The API handler layer fills them in.
 	}, nil
+}
+
+// autoExtract runs both Readability and Pruning concurrently, then picks the
+// result that extracted more meaningful text content.
+func autoExtract(rawHTML, sourceURL string) readability.Article {
+	var (
+		readabilityArticle readability.Article
+		prunedHTML         string
+		pruneErr           error
+	)
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		readabilityArticle, _ = ExtractContent(rawHTML, sourceURL)
+	}()
+
+	go func() {
+		defer wg.Done()
+		prunedHTML, pruneErr = PruneContent(rawHTML, sourceURL)
+	}()
+
+	wg.Wait()
+
+	// If pruning failed, use readability result.
+	if pruneErr != nil {
+		slog.Warn("auto: pruning failed, using readability result",
+			"url", sourceURL, "error", pruneErr,
+		)
+		return readabilityArticle
+	}
+
+	prunedText := stripTags(prunedHTML)
+	readabilityText := strings.TrimSpace(readabilityArticle.TextContent)
+
+	// Pick the result with more extracted text. If readability produced
+	// very little (< minContentLength), prefer pruning, and vice versa.
+	// When both are substantial, prefer whichever has more content.
+	useReadability := len(readabilityText) >= len(prunedText)
+
+	// Quality check: if the longer result is >10x the shorter, it may
+	// contain too much noise — prefer the shorter one if it still has
+	// a reasonable amount of content.
+	if useReadability && len(prunedText) > minContentLength {
+		if len(readabilityText) > 10*len(prunedText) {
+			useReadability = false
+		}
+	} else if !useReadability && len(readabilityText) > minContentLength {
+		if len(prunedText) > 10*len(readabilityText) {
+			useReadability = true
+		}
+	}
+
+	if useReadability {
+		return readabilityArticle
+	}
+
+	// Build Article from pruned result, with metadata from readability.
+	return readability.Article{
+		Title:       readabilityArticle.Title,
+		Byline:      readabilityArticle.Byline,
+		Excerpt:     readabilityArticle.Excerpt,
+		SiteName:    readabilityArticle.SiteName,
+		Language:    readabilityArticle.Language,
+		Content:     prunedHTML,
+		TextContent: prunedText,
+	}
+}
+
+// stripTags is a simple helper that extracts visible text from an HTML
+// fragment by parsing it with goquery. Returns trimmed plain text.
+func stripTags(html string) string {
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
+	if err != nil {
+		return html
+	}
+	return strings.TrimSpace(doc.Text())
 }
