@@ -1,13 +1,13 @@
 <div align="center">
 
-<img src="https://img.shields.io/github/license/Easonliuliang/purify?style=flat-square&color=22C55E" alt="License" />
-<img src="https://img.shields.io/github/stars/Easonliuliang/purify?style=flat-square&color=22C55E" alt="Stars" />
-<img src="https://img.shields.io/github/v/release/Easonliuliang/purify?style=flat-square&color=22C55E" alt="Release" />
-
 # Purify
 
 **The single-binary alternative to Firecrawl.**<br/>
 Web scraping for AI agents — zero dependencies, 99% token savings.
+
+<img src="https://img.shields.io/github/license/Easonliuliang/purify?style=flat-square&color=22C55E" alt="License" />
+<img src="https://img.shields.io/github/stars/Easonliuliang/purify?style=flat-square&color=22C55E" alt="Stars" />
+<img src="https://img.shields.io/github/v/release/Easonliuliang/purify?style=flat-square&color=22C55E" alt="Release" />
 
 [Get Free API Key](https://purify.verifly.pro) · [API Docs](#api) · [MCP Server](#mcp-server) · [Self-Host](#quick-start)
 
