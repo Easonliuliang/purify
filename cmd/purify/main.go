@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/use-agent/purify/api"
+	"github.com/use-agent/purify/cache"
 	"github.com/use-agent/purify/cleaner"
 	"github.com/use-agent/purify/config"
 	"github.com/use-agent/purify/scraper"
@@ -40,9 +41,12 @@ func main() {
 	// ── 4. Initialise cleaner ───────────────────────────────────────
 	cl := cleaner.NewCleaner()
 
+	// ── 4b. Initialise cache ────────────────────────────────────────
+	cc := cache.New(cfg.Cache.MaxEntries)
+
 	// ── 5. Setup router ─────────────────────────────────────────────
 	startTime := time.Now()
-	router := api.NewRouter(sc, cl, cfg, startTime)
+	router := api.NewRouter(sc, cl, cfg, cc, startTime)
 
 	// ── 6. Start HTTP server ────────────────────────────────────────
 	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)

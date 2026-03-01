@@ -14,7 +14,14 @@ type Config struct {
 	Scraper   ScraperConfig
 	Auth      AuthConfig
 	RateLimit RateLimitConfig
+	Cache     CacheConfig
 	Log       LogConfig
+}
+
+// CacheConfig controls the scrape response cache.
+type CacheConfig struct {
+	// MaxEntries is the maximum number of cached responses.
+	MaxEntries int // default: 1000
 }
 
 // ServerConfig controls the HTTP server.
@@ -112,6 +119,9 @@ func Load() *Config {
 		RateLimit: RateLimitConfig{
 			RequestsPerSecond: envFloatOr("PURIFY_RATE_RPS", 5.0),
 			Burst:             envIntOr("PURIFY_RATE_BURST", 10),
+		},
+		Cache: CacheConfig{
+			MaxEntries: envIntOr("CACHE_MAX_ENTRIES", 1000),
 		},
 		Log: LogConfig{
 			Level:  envOr("PURIFY_LOG_LEVEL", "info"),

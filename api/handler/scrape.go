@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/use-agent/purify/cache"
 	"github.com/use-agent/purify/cleaner"
 	"github.com/use-agent/purify/models"
 	"github.com/use-agent/purify/scraper"
@@ -18,7 +19,7 @@ import (
 //  3. Cleaner.Clean    → Markdown/HTML/text     (records cleaning_ms)
 //  4. Merge metadata (readability title → JS title fallback).
 //  5. Fill Timing, return 200.
-func Scrape(sc *scraper.Scraper, cl *cleaner.Cleaner) gin.HandlerFunc {
+func Scrape(sc *scraper.Scraper, cl *cleaner.Cleaner, cc *cache.Cache) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		totalStart := time.Now()
 
@@ -36,6 +37,19 @@ func Scrape(sc *scraper.Scraper, cl *cleaner.Cleaner) gin.HandlerFunc {
 		}
 		req.Defaults()
 
+		// ── 1b. Cache lookup ───────────────────────────────────────
+		if cc != nil && req.MaxAge > 0 {
+			cacheKey := cache.Key(req.URL, req.OutputFormat, req.ExtractMode)
+			if cached, hit := cc.Get(cacheKey, req.MaxAge); hit {
+				cached.CacheStatus = "hit"
+				cached.Timing = models.TimingInfo{
+					TotalMs: time.Since(totalStart).Milliseconds(),
+				}
+				c.JSON(http.StatusOK, cached)
+				return
+			}
+		}
+
 		// ── 2. Scrape ───────────────────────────────────────────────
 		navStart := time.Now()
 		result, err := sc.DoScrape(c.Request.Context(), &req)
@@ -51,7 +65,14 @@ func Scrape(sc *scraper.Scraper, cl *cleaner.Cleaner) gin.HandlerFunc {
 
 		// ── 3. Clean ────────────────────────────────────────────────
 		cleanStart := time.Now()
-		resp, err := cl.Clean(result.RawHTML, req.URL, req.OutputFormat, req.ExtractMode)
+		var cleanOpts []cleaner.CleanOptions
+		if len(req.IncludeTags) > 0 || len(req.ExcludeTags) > 0 {
+			cleanOpts = append(cleanOpts, cleaner.CleanOptions{
+				IncludeTags: req.IncludeTags,
+				ExcludeTags: req.ExcludeTags,
+			})
+		}
+		resp, err := cl.Clean(result.RawHTML, req.URL, req.OutputFormat, req.ExtractMode, cleanOpts...)
 		cleaningMs := time.Since(cleanStart).Milliseconds()
 
 		if err != nil {
@@ -78,6 +99,13 @@ func Scrape(sc *scraper.Scraper, cl *cleaner.Cleaner) gin.HandlerFunc {
 			TotalMs:      time.Since(totalStart).Milliseconds(),
 			NavigationMs: navigationMs,
 			CleaningMs:   cleaningMs,
+		}
+
+		// ── 6. Cache store ──────────────────────────────────────────
+		if cc != nil && req.MaxAge > 0 {
+			cacheKey := cache.Key(req.URL, req.OutputFormat, req.ExtractMode)
+			cc.Set(cacheKey, resp)
+			resp.CacheStatus = "miss"
 		}
 
 		c.JSON(http.StatusOK, resp)

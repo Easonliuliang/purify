@@ -32,6 +32,10 @@ type ScrapeResponse struct {
 	// Timing provides duration breakdowns for the operation.
 	Timing TimingInfo `json:"timing"`
 
+	// CacheStatus indicates whether the response was served from cache.
+	// Values: "hit", "miss", or empty (caching not requested).
+	CacheStatus string `json:"cache_status,omitempty"`
+
 	// Error is populated only when Success is false.
 	Error *ErrorDetail `json:"error,omitempty"`
 }

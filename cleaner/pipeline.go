@@ -26,19 +26,32 @@ func NewCleaner() *Cleaner {
 	}
 }
 
+// CleanOptions carries optional content-filtering parameters for the pipeline.
+type CleanOptions struct {
+	IncludeTags []string
+	ExcludeTags []string
+}
+
 // Clean runs the full pipeline and returns a partial ScrapeResponse
 // (Content + Metadata + Tokens filled; Timing is left to the API layer).
 //
 // Flow:
 //  1. Estimate original tokens from raw HTML.
+//  1b. Apply include/exclude tag filters (if provided).
 //  2. Stage 1: go-readability extracts main content.
 //     Fallback: if extraction fails or content is too short, use raw HTML.
 //  3. Stage 2: convert to the requested output format.
 //  4. Estimate cleaned tokens and compute savings.
 //  5. Assemble and return the partial response.
-func (c *Cleaner) Clean(rawHTML string, sourceURL string, format string, extractMode string) (*models.ScrapeResponse, error) {
+func (c *Cleaner) Clean(rawHTML string, sourceURL string, format string, extractMode string, opts ...CleanOptions) (*models.ScrapeResponse, error) {
 	// ── 1. Original token estimate ──────────────────────────────────
 	originalTokens := EstimateTokens(rawHTML)
+
+	// ── 1b. Content filtering (include/exclude tags) ────────────────
+	if len(opts) > 0 {
+		o := opts[0]
+		rawHTML = FilterContent(rawHTML, o.IncludeTags, o.ExcludeTags)
+	}
 
 	// ── 2. Stage 1: Content extraction ──────────────────────────────
 	var article readability.Article

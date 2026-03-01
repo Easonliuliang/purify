@@ -12,6 +12,7 @@ const (
 	ErrCodeRateLimited  = "RATE_LIMITED"
 	ErrCodeUnauthorized = "UNAUTHORIZED"
 	ErrCodeInternal     = "INTERNAL_ERROR"
+	ErrCodeActionFailed = "ACTION_FAILED"
 )
 
 // ErrorDetail is the structured error in API responses.

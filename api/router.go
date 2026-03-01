@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/use-agent/purify/api/handler"
 	"github.com/use-agent/purify/api/middleware"
+	"github.com/use-agent/purify/cache"
 	"github.com/use-agent/purify/cleaner"
 	"github.com/use-agent/purify/config"
 	"github.com/use-agent/purify/scraper"
@@ -16,10 +17,10 @@ import (
 // Middleware chain:
 //
 //	Global:  Recovery → Logger
-//	/scrape: Auth (if enabled) → RateLimit
+//	API:     Auth (if enabled) → RateLimit
 //
 // Health endpoint is intentionally outside auth so monitoring probes always work.
-func NewRouter(sc *scraper.Scraper, cl *cleaner.Cleaner, cfg *config.Config, startTime time.Time) *gin.Engine {
+func NewRouter(sc *scraper.Scraper, cl *cleaner.Cleaner, cfg *config.Config, cc *cache.Cache, startTime time.Time) *gin.Engine {
 	gin.SetMode(cfg.Server.Mode)
 
 	r := gin.New()
@@ -31,13 +32,26 @@ func NewRouter(sc *scraper.Scraper, cl *cleaner.Cleaner, cfg *config.Config, sta
 	// Health — no auth required.
 	v1.GET("/health", handler.Health(sc, startTime))
 
-	// Scrape — protected by auth + rate limit.
-	scrapeGroup := v1.Group("")
+	// Protected group — auth + rate limit.
+	protected := v1.Group("")
 	if cfg.Auth.Enabled {
-		scrapeGroup.Use(middleware.Auth(cfg.Auth.APIKeys))
+		protected.Use(middleware.Auth(cfg.Auth.APIKeys))
 	}
-	scrapeGroup.Use(middleware.RateLimit(cfg.RateLimit))
-	scrapeGroup.POST("/scrape", handler.Scrape(sc, cl))
+	protected.Use(middleware.RateLimit(cfg.RateLimit))
+
+	// Scrape
+	protected.POST("/scrape", handler.Scrape(sc, cl, cc))
+
+	// Batch
+	protected.POST("/batch/scrape", handler.PostBatch(sc, cl))
+	protected.GET("/batch/:id", handler.GetBatch())
+
+	// Crawl
+	protected.POST("/crawl", handler.PostCrawl(sc, cl))
+	protected.GET("/crawl/:id", handler.GetCrawl())
+
+	// Map
+	protected.POST("/map", handler.PostMap(sc, cl))
 
 	return r
 }

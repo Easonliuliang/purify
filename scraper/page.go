@@ -54,6 +54,11 @@ func (s *Scraper) DoScrape(ctx context.Context, req *models.ScrapeRequest) (*Scr
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
+	// ── 1b. Per-request CDP URL: connect to user's own Chrome ────────
+	if req.CDPURL != "" {
+		return s.doScrapeWithCDP(ctx, req)
+	}
+
 	// ── 2. Acquire page from pool ─────────────────────────────────────
 	s.activePages.Add(1)
 	defer s.activePages.Add(-1)
@@ -143,9 +148,8 @@ func (s *Scraper) DoScrape(ctx context.Context, req *models.ScrapeRequest) (*Scr
 		}.Call(page)
 	}
 
-	// ── 5. Mount hijack router (blocks Image/Stylesheet/Font/Media) ──
-	// setupHijack returns nil if the blocked list is empty.
-	router := setupHijack(page, s.scraperCfg.BlockedResourceTypes)
+	// ── 5. Mount hijack router (blocks Image/Stylesheet/Font/Media + ads) ──
+	router := setupHijack(page, s.scraperCfg.BlockedResourceTypes, req.BlockAds)
 	if router != nil {
 		defer func() { _ = router.Stop() }()
 	}
@@ -221,6 +225,18 @@ func (s *Scraper) DoScrape(ctx context.Context, req *models.ScrapeRequest) (*Scr
 		// Event didn't fire (e.g. intercepted by hijack router).
 	}
 
+	// ── 9c. Remove overlays (cookie banners, popups) ────────────────
+	if req.RemoveOverlays {
+		removeOverlays(p)
+	}
+
+	// ── 9d. Execute browser actions ─────────────────────────────────
+	if len(req.Actions) > 0 {
+		if err := executeActions(ctx, page, req.Actions); err != nil {
+			return nil, err
+		}
+	}
+
 	// ── 10. Extract rendered HTML ─────────────────────────────────────
 	rawHTML, htmlErr := p.HTML()
 	if htmlErr != nil {
@@ -260,6 +276,116 @@ func toHeadersMap(headers map[string]string) proto.NetworkHeaders {
 		m[k] = gson.New(v)
 	}
 	return m
+}
+
+// doScrapeWithCDP connects to a user-provided CDP endpoint, creates a
+// temporary page, scrapes it, and disconnects (without killing the browser).
+func (s *Scraper) doScrapeWithCDP(ctx context.Context, req *models.ScrapeRequest) (*ScrapeResult, error) {
+	browser := rod.New().ControlURL(req.CDPURL)
+	if err := browser.Connect(); err != nil {
+		return nil, models.NewScrapeError(
+			models.ErrCodeBrowserCrash,
+			"failed to connect to CDP URL",
+			err,
+		)
+	}
+	// Disconnect closes the WebSocket but does NOT kill the browser process.
+	defer browser.Close()
+
+	page, err := browser.Page(proto.TargetCreateTarget{})
+	if err != nil {
+		return nil, models.NewScrapeError(
+			models.ErrCodeBrowserCrash,
+			"failed to create page on CDP browser",
+			err,
+		)
+	}
+	defer func() {
+		_ = page.Close()
+	}()
+
+	// Bind context for timeout.
+	p := page.Context(ctx)
+
+	// Navigate.
+	if err := p.Navigate(req.URL); err != nil {
+		return nil, categorizeError(err, "navigation to target URL failed")
+	}
+
+	// Wait for network idle or DOM stable.
+	if req.WaitForNetworkIdle != nil && *req.WaitForNetworkIdle {
+		waitIdle := p.WaitRequestIdle(300*time.Millisecond, nil, nil, nil)
+		waitIdle()
+	} else {
+		_ = p.WaitDOMStable(300*time.Millisecond, 0.1)
+	}
+
+	// Remove overlays if requested.
+	if req.RemoveOverlays {
+		removeOverlays(p)
+	}
+
+	// Execute actions if any.
+	if len(req.Actions) > 0 {
+		if err := executeActions(ctx, page, req.Actions); err != nil {
+			return nil, err
+		}
+	}
+
+	// Extract.
+	rawHTML, htmlErr := p.HTML()
+	if htmlErr != nil {
+		return nil, categorizeError(htmlErr, "failed to extract page HTML")
+	}
+
+	title := evalStringOrEmpty(p, `() => document.title`)
+	finalURL := evalStringOrEmpty(p, `() => window.location.href`)
+	if finalURL == "" {
+		finalURL = req.URL
+	}
+
+	return &ScrapeResult{
+		RawHTML:  rawHTML,
+		Title:    title,
+		FinalURL: finalURL,
+	}, nil
+}
+
+// removeOverlays injects JS to remove fixed/sticky positioned elements with
+// high z-index, which are typically cookie consent banners and popup overlays.
+func removeOverlays(p *rod.Page) {
+	const js = `() => {
+		const els = document.querySelectorAll('*');
+		for (const el of els) {
+			const style = window.getComputedStyle(el);
+			const pos = style.position;
+			if (pos === 'fixed' || pos === 'sticky') {
+				const z = parseInt(style.zIndex, 10);
+				if (z >= 900 || style.zIndex === 'auto') {
+					el.remove();
+				}
+			}
+		}
+		// Also remove common overlay class patterns.
+		const selectors = [
+			'[class*="cookie"]', '[class*="consent"]', '[class*="overlay"]',
+			'[id*="cookie"]', '[id*="consent"]', '[id*="overlay"]',
+			'[class*="popup"]', '[id*="popup"]',
+			'[class*="gdpr"]', '[id*="gdpr"]',
+		];
+		for (const sel of selectors) {
+			document.querySelectorAll(sel).forEach(el => {
+				const style = window.getComputedStyle(el);
+				if (style.position === 'fixed' || style.position === 'sticky' || style.position === 'absolute') {
+					el.remove();
+				}
+			});
+		}
+		// Remove any overflow:hidden on body/html (often set by modals).
+		document.documentElement.style.overflow = '';
+		document.body.style.overflow = '';
+	}`
+	_, _ = p.Eval(js)
 }
 
 // categorizeError wraps raw errors into typed ScrapeErrors so the API layer

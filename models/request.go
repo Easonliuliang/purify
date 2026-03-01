@@ -39,6 +39,59 @@ type ScrapeRequest struct {
 
 	// Cookies sets cookies on the browser before navigation.
 	Cookies []Cookie `json:"cookies,omitempty"`
+
+	// Actions is an ordered list of browser interactions to perform after
+	// the page loads and before extracting content. Max 50 actions.
+	Actions []Action `json:"actions,omitempty" binding:"omitempty,max=50,dive"`
+
+	// IncludeTags is a list of CSS selectors. When non-empty, only elements
+	// matching these selectors are kept in the output.
+	IncludeTags []string `json:"include_tags,omitempty"`
+
+	// ExcludeTags is a list of CSS selectors. Matching elements are removed
+	// from the DOM before content extraction.
+	ExcludeTags []string `json:"exclude_tags,omitempty"`
+
+	// OnlyMainContent is a Firecrawl-compatible alias. When explicitly set
+	// to false, it sets ExtractMode to "raw".
+	OnlyMainContent *bool `json:"only_main_content,omitempty"`
+
+	// RemoveOverlays removes fixed/sticky overlays (cookie banners, popups)
+	// by injecting JS after page load.
+	RemoveOverlays bool `json:"remove_overlays,omitempty"`
+
+	// BlockAds blocks requests to known ad/tracking domains.
+	BlockAds bool `json:"block_ads,omitempty"`
+
+	// CDPURL connects to a user-provided Chrome DevTools Protocol endpoint
+	// instead of using the shared browser pool.
+	CDPURL string `json:"cdp_url,omitempty"`
+
+	// MaxAge is the cache max age in milliseconds. If > 0, the response
+	// may be served from cache if a cached entry exists within this age.
+	// Default: 0 (no caching).
+	MaxAge int `json:"max_age,omitempty" binding:"omitempty,min=0"`
+}
+
+// Action represents a single browser interaction in the actions pipeline.
+type Action struct {
+	// Type is the action kind: "wait", "click", "scroll", "execute_js", "scrape".
+	Type string `json:"type" binding:"required,oneof=wait click scroll execute_js scrape"`
+
+	// Selector is a CSS selector (used by "wait" and "click").
+	Selector string `json:"selector,omitempty"`
+
+	// Milliseconds is the wait duration (used by "wait" when Selector is empty).
+	Milliseconds int `json:"milliseconds,omitempty"`
+
+	// Direction is the scroll direction: "up" or "down" (used by "scroll").
+	Direction string `json:"direction,omitempty" binding:"omitempty,oneof=up down"`
+
+	// Amount is the number of viewport-heights to scroll (used by "scroll").
+	Amount int `json:"amount,omitempty"`
+
+	// Code is the JavaScript to execute (used by "execute_js").
+	Code string `json:"code,omitempty"`
 }
 
 // Cookie represents a browser cookie to set before scraping.
@@ -63,5 +116,10 @@ func (r *ScrapeRequest) Defaults() {
 	}
 	if r.ExtractMode == "" {
 		r.ExtractMode = "readability"
+	}
+	// OnlyMainContent is a Firecrawl-compatible alias: when explicitly
+	// set to false, override ExtractMode to "raw".
+	if r.OnlyMainContent != nil && !*r.OnlyMainContent {
+		r.ExtractMode = "raw"
 	}
 }
