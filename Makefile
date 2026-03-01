@@ -1,4 +1,4 @@
-.PHONY: build build-mcp run clean dev test lint
+.PHONY: build build-mcp run clean dev test lint benchmark
 
 # Binary output
 BINARY := bin/purify
@@ -36,3 +36,9 @@ clean:
 
 tidy:
 	go mod tidy
+
+benchmark:
+	@echo "Running Purify benchmark suite..."
+	@echo "Make sure Purify is running at localhost:8080"
+	@echo ""
+	go run ./scripts/benchmark/main.go
