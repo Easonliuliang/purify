@@ -3,6 +3,7 @@ package middleware
 import (
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/use-agent/purify/config"
@@ -10,26 +11,49 @@ import (
 	"golang.org/x/time/rate"
 )
 
+type limiterEntry struct {
+	limiter  *rate.Limiter
+	lastSeen time.Time
+}
+
 // RateLimit returns per-identity (API key or IP) token-bucket rate limiting
 // middleware powered by golang.org/x/time/rate.
 //
-// For MVP we store limiters in a map guarded by sync.Mutex.
-// TODO: add TTL-based eviction to prevent unbounded memory growth from
-// many unique IPs in a production deployment.
+// Entries unused for 1 hour are evicted by a background goroutine that runs
+// every 5 minutes, preventing unbounded memory growth.
 func RateLimit(cfg config.RateLimitConfig) gin.HandlerFunc {
 	var mu sync.Mutex
-	limiters := make(map[string]*rate.Limiter)
+	limiters := make(map[string]*limiterEntry)
 
 	getLimiter := func(identity string) *rate.Limiter {
 		mu.Lock()
 		defer mu.Unlock()
-		if lim, ok := limiters[identity]; ok {
-			return lim
+		entry, ok := limiters[identity]
+		if !ok {
+			entry = &limiterEntry{
+				limiter: rate.NewLimiter(rate.Limit(cfg.RequestsPerSecond), cfg.Burst),
+			}
+			limiters[identity] = entry
 		}
-		lim := rate.NewLimiter(rate.Limit(cfg.RequestsPerSecond), cfg.Burst)
-		limiters[identity] = lim
-		return lim
+		entry.lastSeen = time.Now()
+		return entry.limiter
 	}
+
+	// Background cleanup goroutine: evict entries not seen in the last hour.
+	go func() {
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			cutoff := time.Now().Add(-1 * time.Hour)
+			mu.Lock()
+			for id, entry := range limiters {
+				if entry.lastSeen.Before(cutoff) {
+					delete(limiters, id)
+				}
+			}
+			mu.Unlock()
+		}
+	}()
 
 	return func(c *gin.Context) {
 		// Prefer API key as identity (set by auth middleware); fall back to IP.
