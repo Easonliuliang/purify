@@ -20,27 +20,53 @@ type HTTPEngine struct {
 	client *http.Client
 }
 
-// NewHTTPEngine creates an HTTPEngine with sensible defaults.
+// chromeH1Spec is a Chrome-like TLS ClientHello with ALPN forced to http/1.1
+// only. Computed once at init time and reused for every connection.
+var chromeH1Spec tls.ClientHelloSpec
+
+func init() {
+	spec, err := tls.UTLSIdToSpec(tls.HelloChrome_Auto)
+	if err != nil {
+		// Fallback: if spec generation fails, use HelloChrome_Auto as-is.
+		// (Should never happen with a valid utls version.)
+		return
+	}
+	// Replace h2 with http/1.1 only in the ALPN extension so the server
+	// never negotiates HTTP/2 (which Go's http.Transport cannot handle
+	// over a utls connection).
+	for i, ext := range spec.Extensions {
+		if alpn, ok := ext.(*tls.ALPNExtension); ok {
+			alpn.AlpnProtocols = []string{"http/1.1"}
+			spec.Extensions[i] = alpn
+			break
+		}
+	}
+	chromeH1Spec = spec
+}
+
+// NewHTTPEngine creates an HTTPEngine with a Chrome-like TLS fingerprint.
+// ALPN is locked to http/1.1 to avoid the HTTP/2 framing mismatch that
+// occurs when utls negotiates h2 but Go's http.Transport only speaks h1.
 func NewHTTPEngine() *HTTPEngine {
 	transport := &http.Transport{
 		DialTLSContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-			// 1. TCP connection
 			dialer := &net.Dialer{Timeout: 10 * time.Second}
 			conn, err := dialer.DialContext(ctx, network, addr)
 			if err != nil {
 				return nil, err
 			}
-			// 2. utls handshake mimicking Chrome
 			host, _, _ := net.SplitHostPort(addr)
-			tlsConn := tls.UClient(conn, &tls.Config{ServerName: host}, tls.HelloChrome_Auto)
+			tlsConn := tls.UClient(conn, &tls.Config{ServerName: host}, tls.HelloCustom)
+			if err := tlsConn.ApplyPreset(&chromeH1Spec); err != nil {
+				conn.Close()
+				return nil, fmt.Errorf("http_engine: apply tls spec: %w", err)
+			}
 			if err := tlsConn.HandshakeContext(ctx); err != nil {
 				conn.Close()
 				return nil, err
 			}
 			return tlsConn, nil
 		},
-		// IMPORTANT: utls HelloChrome_Auto negotiates h2, but http.Transport
-		// doesn't understand ALPN from utls connections. Keep h1.1 only.
 		ForceAttemptHTTP2: false,
 	}
 	return &HTTPEngine{
