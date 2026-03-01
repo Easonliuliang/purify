@@ -227,6 +227,7 @@ func scrapeOne(sc *scraper.Scraper, cl *cleaner.Cleaner, targetURL string, opts 
 
 	resp.StatusCode = result.StatusCode
 	resp.FinalURL = result.FinalURL
+	resp.EngineUsed = result.EngineUsed
 	resp.Timing = models.TimingInfo{
 		TotalMs:      time.Since(totalStart).Milliseconds(),
 		NavigationMs: navigationMs,

@@ -9,13 +9,42 @@ import (
 
 // Config holds all application configuration.
 type Config struct {
-	Server    ServerConfig
-	Browser   BrowserConfig
-	Scraper   ScraperConfig
-	Auth      AuthConfig
-	RateLimit RateLimitConfig
-	Cache     CacheConfig
-	Log       LogConfig
+	Server       ServerConfig
+	Browser      BrowserConfig
+	Scraper      ScraperConfig
+	Auth         AuthConfig
+	RateLimit    RateLimitConfig
+	Cache        CacheConfig
+	Log          LogConfig
+	Engine       EngineConfig
+	AdaptivePool AdaptivePoolConfig
+}
+
+// EngineConfig controls the multi-engine racing dispatcher.
+type EngineConfig struct {
+	// EnableMultiEngine toggles the multi-engine dispatcher.
+	EnableMultiEngine bool // default: true
+
+	// EscalationDelays is the staged start delay for each engine tier.
+	EscalationDelays []time.Duration // default: [0s, 2s, 5s]
+
+	// HTTPTimeout is the deadline for the pure HTTP engine.
+	HTTPTimeout time.Duration // default: 5s
+}
+
+// AdaptivePoolConfig controls the adaptive page pool sizing.
+type AdaptivePoolConfig struct {
+	// MinPages is the minimum number of pages kept in the pool.
+	MinPages int // default: 3
+
+	// HardMax is the absolute maximum number of pages.
+	HardMax int // default: 20
+
+	// MemThreshold is the heap memory fraction (0.0-1.0) above which the pool shrinks.
+	MemThreshold float64 // default: 0.9
+
+	// ScaleStep is the fraction of pool size to grow or shrink per interval.
+	ScaleStep float64 // default: 0.05
 }
 
 // CacheConfig controls the scrape response cache.
@@ -127,7 +156,36 @@ func Load() *Config {
 			Level:  envOr("PURIFY_LOG_LEVEL", "info"),
 			Format: envOr("PURIFY_LOG_FORMAT", "json"),
 		},
+		Engine: EngineConfig{
+			EnableMultiEngine: envBoolOr("PURIFY_MULTI_ENGINE", true),
+			EscalationDelays:  envDurationSliceOr("PURIFY_ESCALATION_DELAYS", []time.Duration{0, 2 * time.Second, 5 * time.Second}),
+			HTTPTimeout:       envDurationOr("PURIFY_HTTP_TIMEOUT", 5*time.Second),
+		},
+		AdaptivePool: AdaptivePoolConfig{
+			MinPages:     envIntOr("PURIFY_MIN_PAGES", 3),
+			HardMax:      envIntOr("PURIFY_HARD_MAX_PAGES", 20),
+			MemThreshold: envFloatOr("PURIFY_MEM_THRESHOLD", 0.9),
+			ScaleStep:    envFloatOr("PURIFY_SCALE_STEP", 0.05),
+		},
 	}
+}
+
+func envDurationSliceOr(key string, fallback []time.Duration) []time.Duration {
+	if v := os.Getenv(key); v != "" {
+		parts := strings.Split(v, ",")
+		result := make([]time.Duration, 0, len(parts))
+		for _, p := range parts {
+			if trimmed := strings.TrimSpace(p); trimmed != "" {
+				if d, err := time.ParseDuration(trimmed); err == nil {
+					result = append(result, d)
+				}
+			}
+		}
+		if len(result) > 0 {
+			return result
+		}
+	}
+	return fallback
 }
 
 // --- helper functions ---

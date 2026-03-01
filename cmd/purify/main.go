@@ -14,6 +14,8 @@ import (
 	"github.com/use-agent/purify/cache"
 	"github.com/use-agent/purify/cleaner"
 	"github.com/use-agent/purify/config"
+	"github.com/use-agent/purify/engine"
+	"github.com/use-agent/purify/models"
 	"github.com/use-agent/purify/scraper"
 )
 
@@ -37,6 +39,46 @@ func main() {
 		os.Exit(1)
 	}
 	defer sc.Close()
+
+	// ── 3b. Initialise multi-engine dispatcher ─────────────────────
+	if cfg.Engine.EnableMultiEngine {
+		// Rod callback: wraps the scraper's DoScrapeRod (bypasses the dispatcher).
+		// This closure avoids a circular import (engine/ never imports scraper/).
+		rodFetch := func(ctx context.Context, req *engine.FetchRequest) (*engine.FetchResult, error) {
+			scrapeReq := &models.ScrapeRequest{
+				URL:     req.URL,
+				Timeout: int(req.Timeout.Seconds()),
+				Stealth: req.Stealth,
+				Headers: req.Headers,
+			}
+			scrapeReq.Defaults()
+
+			result, err := sc.DoScrapeRod(ctx, scrapeReq)
+			if err != nil {
+				return nil, err
+			}
+			return &engine.FetchResult{
+				HTML:       result.RawHTML,
+				Title:      result.Title,
+				StatusCode: result.StatusCode,
+				FinalURL:   result.FinalURL,
+			}, nil
+		}
+
+		httpEngine := engine.NewHTTPEngine()
+		rodEngine := engine.NewRodEngine(rodFetch, false)
+		rodStealthEngine := engine.NewRodEngine(rodFetch, true)
+
+		engines := []engine.Engine{httpEngine, rodEngine, rodStealthEngine}
+		memory := engine.NewDomainMemory(24 * time.Hour)
+		dispatcher := engine.NewDispatcher(engines, cfg.Engine.EscalationDelays, memory)
+
+		sc.SetDispatcher(dispatcher)
+		slog.Info("multi-engine dispatcher enabled",
+			"engines", len(engines),
+			"delays", cfg.Engine.EscalationDelays,
+		)
+	}
 
 	// ── 4. Initialise cleaner ───────────────────────────────────────
 	cl := cleaner.NewCleaner()

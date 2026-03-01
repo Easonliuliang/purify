@@ -95,6 +95,7 @@ func Scrape(sc *scraper.Scraper, cl *cleaner.Cleaner, cc *cache.Cache) gin.Handl
 		// ── 5. Fill scrape result fields + timing and respond ───────
 		resp.StatusCode = result.StatusCode
 		resp.FinalURL = result.FinalURL
+		resp.EngineUsed = result.EngineUsed
 		resp.Timing = models.TimingInfo{
 			TotalMs:      time.Since(totalStart).Milliseconds(),
 			NavigationMs: navigationMs,

@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net/http"
 	"net/url"
 	"time"
 
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/proto"
 	"github.com/go-rod/stealth"
+	"github.com/use-agent/purify/engine"
 	"github.com/use-agent/purify/models"
 	"github.com/ysmood/gson"
 )
@@ -43,9 +45,68 @@ type ScrapeResult struct {
 	Title      string
 	StatusCode int
 	FinalURL   string
+	EngineUsed string
 }
 
 func (s *Scraper) DoScrape(ctx context.Context, req *models.ScrapeRequest) (*ScrapeResult, error) {
+	// ── 0. Multi-engine dispatch ────────────────────────────────────
+	// If the dispatcher is configured AND the request has no Actions AND
+	// no CDPURL, delegate to the multi-engine dispatcher for a faster path.
+	if s.dispatcher != nil && len(req.Actions) == 0 && req.CDPURL == "" {
+		timeout := time.Duration(req.Timeout) * time.Second
+		if timeout > s.scraperCfg.MaxTimeout {
+			timeout = s.scraperCfg.MaxTimeout
+		}
+
+		cookies := make([]http.Cookie, len(req.Cookies))
+		for i, c := range req.Cookies {
+			cookies[i] = http.Cookie{
+				Name:   c.Name,
+				Value:  c.Value,
+				Domain: c.Domain,
+				Path:   c.Path,
+			}
+		}
+
+		fetchReq := &engine.FetchRequest{
+			URL:     req.URL,
+			Headers: req.Headers,
+			Cookies: cookies,
+			Timeout: timeout,
+			Stealth: req.Stealth,
+		}
+
+		dispatchCtx, dispatchCancel := context.WithTimeout(ctx, timeout)
+		defer dispatchCancel()
+
+		result, err := s.dispatcher.Dispatch(dispatchCtx, fetchReq)
+		if err == nil {
+			return &ScrapeResult{
+				RawHTML:    result.HTML,
+				Title:      result.Title,
+				StatusCode: result.StatusCode,
+				FinalURL:   result.FinalURL,
+				EngineUsed: result.EngineName,
+			}, nil
+		}
+		// Dispatcher failed entirely — fall through to existing rod logic.
+		slog.Warn("dispatcher failed, falling back to direct rod scrape",
+			"url", req.URL, "error", err)
+	}
+
+	return s.doScrapeRod(ctx, req)
+}
+
+// DoScrapeRod is the direct rod-based scraping path. It is exported so
+// that the engine.RodEngine callback in main.go can call it without
+// triggering the dispatcher (avoiding infinite recursion).
+func (s *Scraper) DoScrapeRod(ctx context.Context, req *models.ScrapeRequest) (*ScrapeResult, error) {
+	return s.doScrapeRod(ctx, req)
+}
+
+// doScrapeRod contains the full rod-based scraping logic (timeout, pool,
+// stealth, navigation, extraction). This is the original DoScrape path.
+func (s *Scraper) doScrapeRod(ctx context.Context, req *models.ScrapeRequest) (*ScrapeResult, error) {
 	// ── 1. Timeout guard ──────────────────────────────────────────────
 	timeout := time.Duration(req.Timeout) * time.Second
 	if timeout > s.scraperCfg.MaxTimeout {

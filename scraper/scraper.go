@@ -9,6 +9,7 @@ import (
 	"github.com/go-rod/rod/lib/launcher"
 	"github.com/go-rod/rod/lib/launcher/flags"
 	"github.com/use-agent/purify/config"
+	"github.com/use-agent/purify/engine"
 	"github.com/use-agent/purify/models"
 )
 
@@ -21,6 +22,7 @@ type Scraper struct {
 	scraperCfg  config.ScraperConfig
 	activePages atomic.Int32
 	startTime   time.Time
+	dispatcher  *engine.Dispatcher
 }
 
 // NewScraper launches a headless browser and initialises the reusable page pool.
@@ -81,6 +83,12 @@ func NewScraper(browserCfg config.BrowserConfig, scraperCfg config.ScraperConfig
 		scraperCfg: scraperCfg,
 		startTime:  time.Now(),
 	}, nil
+}
+
+// SetDispatcher sets the multi-engine dispatcher. When set, DoScrape will
+// delegate simple requests (no Actions, no CDPURL) to the dispatcher.
+func (s *Scraper) SetDispatcher(d *engine.Dispatcher) {
+	s.dispatcher = d
 }
 
 // Stats returns a snapshot of the pool's current state.
