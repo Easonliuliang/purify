@@ -5,11 +5,26 @@ type ScrapeResponse struct {
 	// Success indicates whether the scrape completed without errors.
 	Success bool `json:"success"`
 
+	// StatusCode is the HTTP status code from the scraped page.
+	StatusCode int `json:"status_code"`
+
+	// FinalURL is the URL after following all redirects.
+	FinalURL string `json:"final_url"`
+
 	// Content is the cleaned output in the requested format.
 	Content string `json:"content"`
 
 	// Metadata contains extracted page metadata.
 	Metadata Metadata `json:"metadata"`
+
+	// Links contains internal and external links extracted from the page.
+	Links LinksResult `json:"links"`
+
+	// Images contains image src and alt text extracted from the page.
+	Images []Image `json:"images"`
+
+	// OGMetadata contains Open Graph meta tags from the page.
+	OGMetadata OGMetadata `json:"og_metadata"`
 
 	// Tokens provides token estimates before and after cleaning.
 	Tokens TokenInfo `json:"tokens"`
@@ -19,6 +34,32 @@ type ScrapeResponse struct {
 
 	// Error is populated only when Success is false.
 	Error *ErrorDetail `json:"error,omitempty"`
+}
+
+// LinksResult separates extracted links into internal and external groups.
+type LinksResult struct {
+	Internal []Link `json:"internal"`
+	External []Link `json:"external"`
+}
+
+// Link represents a hyperlink extracted from the page.
+type Link struct {
+	Href string `json:"href"`
+	Text string `json:"text,omitempty"`
+}
+
+// Image represents an image element extracted from the page.
+type Image struct {
+	Src string `json:"src"`
+	Alt string `json:"alt,omitempty"`
+}
+
+// OGMetadata contains Open Graph protocol meta tags.
+type OGMetadata struct {
+	Title       string `json:"title,omitempty"`
+	Description string `json:"description,omitempty"`
+	Image       string `json:"image,omitempty"`
+	Type        string `json:"type,omitempty"`
 }
 
 // Metadata holds page-level information extracted during scraping.

@@ -91,7 +91,12 @@ func (c *Cleaner) Clean(rawHTML string, sourceURL string, format string, extract
 		savingsPercent = math.Round(savingsPercent*100) / 100
 	}
 
-	// ── 5. Assemble partial response ────────────────────────────────
+	// ── 5. Extract links, images, OG metadata from raw HTML ────────
+	links := ExtractLinks(rawHTML, sourceURL)
+	images := ExtractImages(rawHTML, sourceURL)
+	ogMeta := ExtractOGMetadata(rawHTML)
+
+	// ── 6. Assemble partial response ────────────────────────────────
 	return &models.ScrapeResponse{
 		Success: true,
 		Content: content,
@@ -103,12 +108,15 @@ func (c *Cleaner) Clean(rawHTML string, sourceURL string, format string, extract
 			Language:    article.Language,
 			SourceURL:   sourceURL,
 		},
+		Links:      links,
+		Images:     images,
+		OGMetadata: ogMeta,
 		Tokens: models.TokenInfo{
 			OriginalEstimate: originalTokens,
 			CleanedEstimate:  cleanedTokens,
 			SavingsPercent:   savingsPercent,
 		},
-		// Timing is intentionally left zero-valued.
-		// The API handler layer computes end-to-end timing.
+		// Timing, StatusCode, FinalURL are left zero-valued.
+		// The API handler layer fills them in.
 	}, nil
 }

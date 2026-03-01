@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/launcher"
+	"github.com/go-rod/rod/lib/launcher/flags"
 	"github.com/use-agent/purify/config"
 	"github.com/use-agent/purify/models"
 )
@@ -34,6 +35,25 @@ func NewScraper(browserCfg config.BrowserConfig, scraperCfg config.ScraperConfig
 	if browserCfg.DefaultProxy != "" {
 		l = l.Proxy(browserCfg.DefaultProxy)
 	}
+
+	// ── Stealth flags ────────────────────────────────────────────────
+	// CDP-level flags to reduce bot-detection fingerprint.
+	// These complement the JS-level stealth injection (navigator.webdriver
+	// masking) that happens per-page in DoScrape.
+	l.Set(flags.Flag("disable-blink-features"), "AutomationControlled")
+	l.Delete(flags.Flag("enable-automation"))
+	l.Set(flags.Flag("disable-features"), "AudioServiceOutOfProcess,TranslateUI")
+	l.Set(flags.Flag("disable-ipc-flooding-protection"))
+	l.Set(flags.Flag("disable-popup-blocking"))
+	l.Set(flags.Flag("disable-prompt-on-repost"))
+	l.Set(flags.Flag("disable-renderer-backgrounding"))
+	l.Set(flags.Flag("disable-background-timer-throttling"))
+	l.Set(flags.Flag("disable-backgrounding-occluded-windows"))
+	l.Set(flags.Flag("disable-component-update"))
+	l.Set(flags.Flag("disable-default-apps"))
+	l.Set(flags.Flag("disable-dev-shm-usage"))
+	l.Set(flags.Flag("disable-extensions"))
+	l.Set(flags.Flag("no-first-run"))
 
 	controlURL, err := l.Launch()
 	if err != nil {

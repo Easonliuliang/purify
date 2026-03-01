@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net/url"
 	"time"
 
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/proto"
 	"github.com/go-rod/stealth"
 	"github.com/use-agent/purify/models"
+	"github.com/ysmood/gson"
 )
 
 // DoScrape fetches the fully-rendered HTML and page title for the given URL.
@@ -35,7 +37,15 @@ import (
 //     wait would return instantly (false idle).
 //   - Step 3's about:blank uses the ORIGINAL page reference (without request
 //     context), so cleanup succeeds even if the request context has expired.
-func (s *Scraper) DoScrape(ctx context.Context, req *models.ScrapeRequest) (rawHTML string, title string, err error) {
+// ScrapeResult holds the output of a single scrape operation.
+type ScrapeResult struct {
+	RawHTML    string
+	Title      string
+	StatusCode int
+	FinalURL   string
+}
+
+func (s *Scraper) DoScrape(ctx context.Context, req *models.ScrapeRequest) (*ScrapeResult, error) {
 	// ── 1. Timeout guard ──────────────────────────────────────────────
 	timeout := time.Duration(req.Timeout) * time.Second
 	if timeout > s.scraperCfg.MaxTimeout {
@@ -52,7 +62,7 @@ func (s *Scraper) DoScrape(ctx context.Context, req *models.ScrapeRequest) (rawH
 		return s.browser.Page(proto.TargetCreateTarget{})
 	})
 	if acquireErr != nil {
-		return "", "", models.NewScrapeError(
+		return nil, models.NewScrapeError(
 			models.ErrCodeBrowserCrash,
 			"failed to acquire page from pool",
 			acquireErr,
@@ -93,6 +103,46 @@ func (s *Scraper) DoScrape(ctx context.Context, req *models.ScrapeRequest) (rawH
 		}
 	}
 
+	// ── 4b. Build extra headers (custom + Google Referer) ────────────
+	// Google Referer: many sites give Google-referred traffic looser
+	// anti-bot policies (afraid of hurting SEO). We set a Google search
+	// referer by default, unless the user provided their own Referer.
+	extraHeaders := make(map[string]string, len(req.Headers)+1)
+	if _, hasReferer := req.Headers["Referer"]; !hasReferer {
+		if u, parseErr := url.Parse(req.URL); parseErr == nil {
+			extraHeaders["Referer"] = "https://www.google.com/search?q=" + url.QueryEscape(u.Hostname())
+		}
+	}
+	// User-provided headers override defaults (including Referer).
+	for k, v := range req.Headers {
+		extraHeaders[k] = v
+	}
+	if len(extraHeaders) > 0 {
+		_ = proto.NetworkSetExtraHTTPHeaders{
+			Headers: toHeadersMap(extraHeaders),
+		}.Call(page)
+	}
+
+	// ── 4c. Custom cookies ──────────────────────────────────────────
+	for _, cookie := range req.Cookies {
+		domain := cookie.Domain
+		if domain == "" {
+			if u, parseErr := url.Parse(req.URL); parseErr == nil {
+				domain = u.Host
+			}
+		}
+		path := cookie.Path
+		if path == "" {
+			path = "/"
+		}
+		_, _ = proto.NetworkSetCookie{
+			Name:   cookie.Name,
+			Value:  cookie.Value,
+			Domain: domain,
+			Path:   path,
+		}.Call(page)
+	}
+
 	// ── 5. Mount hijack router (blocks Image/Stylesheet/Font/Media) ──
 	// setupHijack returns nil if the blocked list is empty.
 	router := setupHijack(page, s.scraperCfg.BlockedResourceTypes)
@@ -124,9 +174,25 @@ func (s *Scraper) DoScrape(ctx context.Context, req *models.ScrapeRequest) (rawH
 		)
 	}
 
+	// ── 7b. Status code capture ──────────────────────────────────────
+	// Listen for the first main-frame document response to capture the
+	// HTTP status code. Uses a channel so we never block the main flow.
+	statusCh := make(chan int, 1)
+	go page.EachEvent(func(e *proto.NetworkResponseReceived) bool {
+		if e.Type == proto.NetworkResourceTypeDocument {
+			select {
+			case statusCh <- e.Response.Status:
+			default:
+			}
+			return true
+		}
+		return false
+	})()
+
 	// ── 8. Navigate ───────────────────────────────────────────────────
-	if err = p.Navigate(req.URL); err != nil {
-		return "", "", categorizeError(err, "navigation to target URL failed")
+	var navErr error
+	if navErr = p.Navigate(req.URL); navErr != nil {
+		return nil, categorizeError(navErr, "navigation to target URL failed")
 	}
 
 	// ── 9. Wait strategy ──────────────────────────────────────────────
@@ -147,16 +213,33 @@ func (s *Scraper) DoScrape(ctx context.Context, req *models.ScrapeRequest) (rawH
 		}
 	}
 
-	// ── 10. Extract rendered HTML ─────────────────────────────────────
-	rawHTML, err = p.HTML()
-	if err != nil {
-		return "", "", categorizeError(err, "failed to extract page HTML")
+	// ── 9b. Collect status code (best-effort) ────────────────────────
+	var statusCode int
+	select {
+	case statusCode = <-statusCh:
+	default:
+		// Event didn't fire (e.g. intercepted by hijack router).
 	}
 
-	// ── 11. Extract title (best-effort) ───────────────────────────────
-	title = evalStringOrEmpty(p, `() => document.title`)
+	// ── 10. Extract rendered HTML ─────────────────────────────────────
+	rawHTML, htmlErr := p.HTML()
+	if htmlErr != nil {
+		return nil, categorizeError(htmlErr, "failed to extract page HTML")
+	}
 
-	return rawHTML, title, nil
+	// ── 11. Extract title and final URL (best-effort) ────────────────
+	title := evalStringOrEmpty(p, `() => document.title`)
+	finalURL := evalStringOrEmpty(p, `() => window.location.href`)
+	if finalURL == "" {
+		finalURL = req.URL
+	}
+
+	return &ScrapeResult{
+		RawHTML:    rawHTML,
+		Title:      title,
+		StatusCode: statusCode,
+		FinalURL:   finalURL,
+	}, nil
 }
 
 // evalStringOrEmpty evaluates a JS expression and returns the string result,
@@ -167,6 +250,16 @@ func evalStringOrEmpty(page *rod.Page, js string) string {
 		return ""
 	}
 	return res.Value.Str()
+}
+
+// toHeadersMap converts a plain string map to the proto.NetworkHeaders type
+// (map[string]gson.JSON) required by NetworkSetExtraHTTPHeaders.
+func toHeadersMap(headers map[string]string) proto.NetworkHeaders {
+	m := make(proto.NetworkHeaders, len(headers))
+	for k, v := range headers {
+		m[k] = gson.New(v)
+	}
+	return m
 }
 
 // categorizeError wraps raw errors into typed ScrapeErrors so the API layer

@@ -38,7 +38,7 @@ func Scrape(sc *scraper.Scraper, cl *cleaner.Cleaner) gin.HandlerFunc {
 
 		// ── 2. Scrape ───────────────────────────────────────────────
 		navStart := time.Now()
-		rawHTML, jsTitle, err := sc.DoScrape(c.Request.Context(), &req)
+		result, err := sc.DoScrape(c.Request.Context(), &req)
 		navigationMs := time.Since(navStart).Milliseconds()
 
 		if err != nil {
@@ -51,7 +51,7 @@ func Scrape(sc *scraper.Scraper, cl *cleaner.Cleaner) gin.HandlerFunc {
 
 		// ── 3. Clean ────────────────────────────────────────────────
 		cleanStart := time.Now()
-		resp, err := cl.Clean(rawHTML, req.URL, req.OutputFormat, req.ExtractMode)
+		resp, err := cl.Clean(result.RawHTML, req.URL, req.OutputFormat, req.ExtractMode)
 		cleaningMs := time.Since(cleanStart).Milliseconds()
 
 		if err != nil {
@@ -68,10 +68,12 @@ func Scrape(sc *scraper.Scraper, cl *cleaner.Cleaner) gin.HandlerFunc {
 		// (raw-HTML passthrough) it will be empty. Use the JS-evaluated
 		// document.title as the safety net.
 		if resp.Metadata.Title == "" {
-			resp.Metadata.Title = jsTitle
+			resp.Metadata.Title = result.Title
 		}
 
-		// ── 5. Fill timing and respond ──────────────────────────────
+		// ── 5. Fill scrape result fields + timing and respond ───────
+		resp.StatusCode = result.StatusCode
+		resp.FinalURL = result.FinalURL
 		resp.Timing = models.TimingInfo{
 			TotalMs:      time.Since(totalStart).Milliseconds(),
 			NavigationMs: navigationMs,
