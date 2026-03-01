@@ -13,6 +13,11 @@ const (
 	ErrCodeUnauthorized = "UNAUTHORIZED"
 	ErrCodeInternal     = "INTERNAL_ERROR"
 	ErrCodeActionFailed = "ACTION_FAILED"
+
+	// LLM-related error codes for /api/v1/extract.
+	ErrCodeLLMFailure     = "LLM_FAILURE"
+	ErrCodeLLMAuthFailure = "LLM_AUTH_FAILURE"
+	ErrCodeLLMRateLimited = "LLM_RATE_LIMITED"
 )
 
 // ErrorDetail is the structured error in API responses.

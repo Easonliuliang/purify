@@ -33,6 +33,10 @@ type ScrapeRequest struct {
 	// "raw": skip readability, pass full rendered HTML directly to format conversion.
 	ExtractMode string `json:"extract_mode,omitempty" binding:"omitempty,oneof=readability raw pruning auto"`
 
+	// CSSSelector is an optional CSS selector to filter HTML before cleaning.
+	// When set, only the matched elements' outer HTML is passed to the pipeline.
+	CSSSelector string `json:"css_selector,omitempty"`
+
 	// Headers sets custom HTTP headers for the request.
 	// Example: {"Authorization": "Bearer xxx", "Accept-Language": "en-US"}
 	Headers map[string]string `json:"headers,omitempty"`

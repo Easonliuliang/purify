@@ -66,10 +66,11 @@ func Scrape(sc *scraper.Scraper, cl *cleaner.Cleaner, cc *cache.Cache) gin.Handl
 		// ── 3. Clean ────────────────────────────────────────────────
 		cleanStart := time.Now()
 		var cleanOpts []cleaner.CleanOptions
-		if len(req.IncludeTags) > 0 || len(req.ExcludeTags) > 0 {
+		if len(req.IncludeTags) > 0 || len(req.ExcludeTags) > 0 || req.CSSSelector != "" {
 			cleanOpts = append(cleanOpts, cleaner.CleanOptions{
 				IncludeTags: req.IncludeTags,
 				ExcludeTags: req.ExcludeTags,
+				CSSSelector: req.CSSSelector,
 			})
 		}
 		resp, err := cl.Clean(result.RawHTML, req.URL, req.OutputFormat, req.ExtractMode, cleanOpts...)
@@ -85,12 +86,10 @@ func Scrape(sc *scraper.Scraper, cl *cleaner.Cleaner, cc *cache.Cache) gin.Handl
 		}
 
 		// ── 4. Title fallback ───────────────────────────────────────
-		// Readability usually extracts a better title, but on fallback
-		// (raw-HTML passthrough) it will be empty. Use the JS-evaluated
-		// document.title as the safety net.
 		if resp.Metadata.Title == "" {
 			resp.Metadata.Title = result.Title
 		}
+		resp.Metadata.FetchMethod = result.FetchMethod
 
 		// ── 5. Fill scrape result fields + timing and respond ───────
 		resp.StatusCode = result.StatusCode

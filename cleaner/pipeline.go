@@ -34,6 +34,7 @@ func NewCleaner() *Cleaner {
 type CleanOptions struct {
 	IncludeTags []string
 	ExcludeTags []string
+	CSSSelector string
 }
 
 // Clean runs the full pipeline and returns a partial ScrapeResponse
@@ -51,9 +52,24 @@ func (c *Cleaner) Clean(rawHTML string, sourceURL string, format string, extract
 	// ── 1. Original token estimate ──────────────────────────────────
 	originalTokens := EstimateTokens(rawHTML)
 
-	// ── 1b. Content filtering (include/exclude tags) ────────────────
+	// ── 1b. Content filtering (include/exclude tags + CSS selector) ──
 	if len(opts) > 0 {
 		o := opts[0]
+
+		// CSS selector filter (remote feature).
+		if o.CSSSelector != "" {
+			filtered, err := ApplyCSSSelector(rawHTML, o.CSSSelector)
+			if err != nil {
+				return nil, models.NewScrapeError(
+					models.ErrCodeInvalidInput,
+					"invalid CSS selector: "+err.Error(),
+					err,
+				)
+			}
+			rawHTML = filtered
+		}
+
+		// Include/exclude tag filter (Phase 2 feature).
 		rawHTML = FilterContent(rawHTML, o.IncludeTags, o.ExcludeTags)
 	}
 

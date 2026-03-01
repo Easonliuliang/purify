@@ -9,6 +9,7 @@ import (
 	"github.com/use-agent/purify/cache"
 	"github.com/use-agent/purify/cleaner"
 	"github.com/use-agent/purify/config"
+	"github.com/use-agent/purify/llm"
 	"github.com/use-agent/purify/scraper"
 )
 
@@ -20,7 +21,7 @@ import (
 //	API:     Auth (if enabled) → RateLimit
 //
 // Health endpoint is intentionally outside auth so monitoring probes always work.
-func NewRouter(sc *scraper.Scraper, cl *cleaner.Cleaner, cfg *config.Config, cc *cache.Cache, startTime time.Time) *gin.Engine {
+func NewRouter(sc *scraper.Scraper, cl *cleaner.Cleaner, llmClient *llm.Client, cfg *config.Config, cc *cache.Cache, startTime time.Time) *gin.Engine {
 	gin.SetMode(cfg.Server.Mode)
 
 	r := gin.New()
@@ -41,6 +42,9 @@ func NewRouter(sc *scraper.Scraper, cl *cleaner.Cleaner, cfg *config.Config, cc 
 
 	// Scrape
 	protected.POST("/scrape", handler.Scrape(sc, cl, cc))
+
+	// Extract (structured extraction via LLM)
+	protected.POST("/extract", handler.Extract(sc, cl, llmClient))
 
 	// Batch
 	protected.POST("/batch/scrape", handler.PostBatch(sc, cl))

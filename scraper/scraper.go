@@ -20,6 +20,7 @@ type Scraper struct {
 	pagePool    rod.Pool[rod.Page]
 	browserCfg  config.BrowserConfig
 	scraperCfg  config.ScraperConfig
+	httpFetcher *httpFetcher
 	activePages atomic.Int32
 	startTime   time.Time
 	dispatcher  *engine.Dispatcher
@@ -77,11 +78,12 @@ func NewScraper(browserCfg config.BrowserConfig, scraperCfg config.ScraperConfig
 	slog.Info("page pool created", "maxPages", browserCfg.MaxPages)
 
 	return &Scraper{
-		browser:    browser,
-		pagePool:   pool,
-		browserCfg: browserCfg,
-		scraperCfg: scraperCfg,
-		startTime:  time.Now(),
+		browser:     browser,
+		pagePool:    pool,
+		browserCfg:  browserCfg,
+		scraperCfg:  scraperCfg,
+		httpFetcher: newHTTPFetcher(browserCfg.DefaultProxy),
+		startTime:   time.Now(),
 	}, nil
 }
 
