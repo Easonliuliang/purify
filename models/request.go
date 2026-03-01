@@ -26,7 +26,7 @@ type ScrapeRequest struct {
 
 	// OutputFormat controls the response body format.
 	// Allowed: "markdown" (default), "html", "text".
-	OutputFormat string `json:"output_format,omitempty" binding:"omitempty,oneof=markdown html text"`
+	OutputFormat string `json:"output_format,omitempty" binding:"omitempty,oneof=markdown html text markdown_citations"`
 
 	// ExtractMode controls the content extraction strategy.
 	// "readability" (default): two-stage pipeline, readability extracts main body → format conversion.

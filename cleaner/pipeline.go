@@ -126,6 +126,16 @@ func (c *Cleaner) Clean(rawHTML string, sourceURL string, format string, extract
 				err,
 			)
 		}
+	case "markdown_citations":
+		content, err = ToMarkdown(c.mdConverter, article.Content, sourceURL)
+		if err != nil {
+			return nil, models.NewScrapeError(
+				models.ErrCodeReadability,
+				"markdown conversion failed",
+				err,
+			)
+		}
+		content = ConvertToCitations(content)
 	case "html":
 		// Return the readability-cleaned HTML as-is.
 		content = article.Content
