@@ -109,16 +109,12 @@ func (s *Scraper) DoScrape(ctx context.Context, req *models.ScrapeRequest) (*Scr
 	}
 
 	// ── 4b. Build extra headers (custom + Google Referer) ────────────
-	// Google Referer: many sites give Google-referred traffic looser
-	// anti-bot policies (afraid of hurting SEO). We set a Google search
-	// referer by default, unless the user provided their own Referer.
 	extraHeaders := make(map[string]string, len(req.Headers)+1)
 	if _, hasReferer := req.Headers["Referer"]; !hasReferer {
 		if u, parseErr := url.Parse(req.URL); parseErr == nil {
 			extraHeaders["Referer"] = "https://www.google.com/search?q=" + url.QueryEscape(u.Hostname())
 		}
 	}
-	// User-provided headers override defaults (including Referer).
 	for k, v := range req.Headers {
 		extraHeaders[k] = v
 	}
@@ -162,36 +158,17 @@ func (s *Scraper) DoScrape(ctx context.Context, req *models.ScrapeRequest) (*Scr
 	p := page.Context(ctx)
 
 	// ── 7. Set up network idle waiter BEFORE navigation ───────────────
-	// WaitRequestIdle registers a CDP Fetch listener that tracks in-flight
-	// requests.  The returned `waitIdle` function blocks until no new
-	// requests have fired for `d` (300 ms).
-	//
-	// If we registered it AFTER Navigate, we would miss the initial burst
-	// of requests and the waiter would return immediately (false positive).
+	// NOTE: WaitRequestIdle uses the Fetch domain which conflicts with
+	// HijackRequests on Chromium 145+. Use WaitDOMStable as fallback.
 	var waitIdle func()
-	if req.WaitForNetworkIdle != nil && *req.WaitForNetworkIdle {
-		waitIdle = p.WaitRequestIdle(
-			300*time.Millisecond, // idle threshold
-			nil,                  // includes (nil = all URLs)
-			nil,                  // excludes
-			nil,                  // excludeTypes
-		)
-	}
 
 	// ── 7b. Status code capture ──────────────────────────────────────
-	// Listen for the first main-frame document response to capture the
-	// HTTP status code. Uses a channel so we never block the main flow.
-	statusCh := make(chan int, 1)
-	go page.EachEvent(func(e *proto.NetworkResponseReceived) bool {
-		if e.Type == proto.NetworkResourceTypeDocument {
-			select {
-			case statusCh <- e.Response.Status:
-			default:
-			}
-			return true
-		}
-		return false
-	})()
+	// NOTE: page.EachEvent(NetworkResponseReceived) causes ERR_BLOCKED_BY_CLIENT
+	// on Chromium 145+ because it internally enables Network domain interception
+	// which conflicts with the Fetch domain used by HijackRequests/WaitRequestIdle.
+	// Instead, we capture the status code AFTER navigation from the page's
+	// NavigationHistory, which is always available without any event listeners.
+	var statusCode int
 
 	// ── 8. Navigate ───────────────────────────────────────────────────
 	var navErr error
@@ -217,12 +194,17 @@ func (s *Scraper) DoScrape(ctx context.Context, req *models.ScrapeRequest) (*Scr
 		}
 	}
 
-	// ── 9b. Collect status code (best-effort) ────────────────────────
-	var statusCode int
-	select {
-	case statusCode = <-statusCh:
-	default:
-		// Event didn't fire (e.g. intercepted by hijack router).
+	// ── 9b. Collect status code via JS (best-effort) ────────────────
+	// Use performance.getEntriesByType("navigation") to get the HTTP status
+	// code without needing CDP event listeners.
+	if res, err := p.Eval(`() => {
+		try {
+			const entries = performance.getEntriesByType("navigation");
+			if (entries.length > 0) return entries[0].responseStatus || 0;
+		} catch(e) {}
+		return 0;
+	}`); err == nil {
+		statusCode = res.Value.Int()
 	}
 
 	// ── 9c. Remove overlays (cookie banners, popups) ────────────────

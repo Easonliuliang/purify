@@ -37,9 +37,6 @@ func NewScraper(browserCfg config.BrowserConfig, scraperCfg config.ScraperConfig
 	}
 
 	// ── Stealth flags ────────────────────────────────────────────────
-	// CDP-level flags to reduce bot-detection fingerprint.
-	// These complement the JS-level stealth injection (navigator.webdriver
-	// masking) that happens per-page in DoScrape.
 	l.Set(flags.Flag("disable-blink-features"), "AutomationControlled")
 	l.Delete(flags.Flag("enable-automation"))
 	l.Set(flags.Flag("disable-features"), "AudioServiceOutOfProcess,TranslateUI")
