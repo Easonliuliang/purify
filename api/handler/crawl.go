@@ -13,6 +13,7 @@ import (
 	"github.com/use-agent/purify/cleaner"
 	"github.com/use-agent/purify/models"
 	"github.com/use-agent/purify/scraper"
+	"github.com/use-agent/purify/webhook"
 )
 
 // crawlStore holds all in-flight and completed crawl jobs.
@@ -66,9 +67,11 @@ func PostCrawl(sc *scraper.Scraper, cl *cleaner.Cleaner) gin.HandlerFunc {
 
 		jobID := "crawl-" + randomID()
 		job := &models.CrawlJob{
-			ID:        jobID,
-			Status:    "processing",
-			CreatedAt: time.Now().Unix(),
+			ID:            jobID,
+			Status:        "processing",
+			CreatedAt:     time.Now().Unix(),
+			WebhookURL:    req.WebhookURL,
+			WebhookSecret: req.WebhookSecret,
 		}
 		crawlStore.Store(jobID, job)
 
@@ -183,6 +186,16 @@ func runCrawl(sc *scraper.Scraper, cl *cleaner.Cleaner, job *models.CrawlJob, re
 				job.Results = results
 				mu.Unlock()
 
+				// Send per-page webhook if configured.
+				if job.WebhookURL != "" {
+					webhook.DeliverAsync(job.WebhookURL, job.WebhookSecret, &webhook.Event{
+						Type:      "crawl.page",
+						JobID:     job.ID,
+						Timestamp: time.Now().Unix(),
+						Data:      resp,
+					})
+				}
+
 				// If within depth limit and successful, extract links for next level.
 				if it.depth < req.MaxDepth && resp.Success {
 					for _, link := range resp.Links.Internal {
@@ -239,6 +252,23 @@ func runCrawl(sc *scraper.Scraper, cl *cleaner.Cleaner, job *models.CrawlJob, re
 		"status", job.Status,
 		"total", job.Total,
 	)
+
+	// Send completion/failure webhook if configured.
+	if job.WebhookURL != "" {
+		eventType := "crawl." + job.Status
+		webhook.DeliverAsync(job.WebhookURL, job.WebhookSecret, &webhook.Event{
+			Type:      eventType,
+			JobID:     job.ID,
+			Timestamp: time.Now().Unix(),
+			Data: models.CrawlStatusResponse{
+				ID:        job.ID,
+				Status:    job.Status,
+				Completed: job.Completed,
+				Total:     job.Total,
+				Results:   job.Results,
+			},
+		})
+	}
 }
 
 // isInScope checks whether a link URL is within the crawl scope relative to the base URL.

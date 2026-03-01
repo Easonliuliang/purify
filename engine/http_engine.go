@@ -4,9 +4,12 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
+	"time"
 
+	tls "github.com/refraction-networking/utls"
 	"golang.org/x/net/html"
 )
 
@@ -19,9 +22,30 @@ type HTTPEngine struct {
 
 // NewHTTPEngine creates an HTTPEngine with sensible defaults.
 func NewHTTPEngine() *HTTPEngine {
+	transport := &http.Transport{
+		DialTLSContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			// 1. TCP connection
+			dialer := &net.Dialer{Timeout: 10 * time.Second}
+			conn, err := dialer.DialContext(ctx, network, addr)
+			if err != nil {
+				return nil, err
+			}
+			// 2. utls handshake mimicking Chrome
+			host, _, _ := net.SplitHostPort(addr)
+			tlsConn := tls.UClient(conn, &tls.Config{ServerName: host}, tls.HelloChrome_Auto)
+			if err := tlsConn.HandshakeContext(ctx); err != nil {
+				conn.Close()
+				return nil, err
+			}
+			return tlsConn, nil
+		},
+		// IMPORTANT: utls HelloChrome_Auto negotiates h2, but http.Transport
+		// doesn't understand ALPN from utls connections. Keep h1.1 only.
+		ForceAttemptHTTP2: false,
+	}
 	return &HTTPEngine{
 		client: &http.Client{
-			// Do not set a global timeout here; we rely on the context deadline.
+			Transport: transport,
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
 				if len(via) >= 10 {
 					return fmt.Errorf("too many redirects")

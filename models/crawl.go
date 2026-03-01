@@ -23,6 +23,9 @@ type CrawlRequest struct {
 
 	// Options contains shared scrape options for each crawled page.
 	Options CrawlOptions `json:"options"`
+
+	WebhookURL    string `json:"webhook_url,omitempty" binding:"omitempty,url"`
+	WebhookSecret string `json:"webhook_secret,omitempty"`
 }
 
 // CrawlOptions are the scrape settings for each crawled page.
@@ -48,10 +51,12 @@ type CrawlStatusResponse struct {
 
 // CrawlJob tracks an in-progress crawl operation.
 type CrawlJob struct {
-	ID        string
-	Status    string // "processing", "completed", "failed", "partial"
-	Total     int
-	Completed int
-	Results   []*ScrapeResponse
-	CreatedAt int64 // unix timestamp
+	ID            string
+	Status        string // "processing", "completed", "failed", "partial"
+	Total         int
+	Completed     int
+	Results       []*ScrapeResponse
+	CreatedAt     int64 // unix timestamp
+	WebhookURL    string
+	WebhookSecret string
 }
