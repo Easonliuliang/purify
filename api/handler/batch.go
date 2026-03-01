@@ -14,6 +14,7 @@ import (
 	"github.com/use-agent/purify/cleaner"
 	"github.com/use-agent/purify/models"
 	"github.com/use-agent/purify/scraper"
+	"github.com/use-agent/purify/webhook"
 )
 
 // batchStore holds all in-flight and completed batch jobs.
@@ -62,12 +63,14 @@ func PostBatch(sc *scraper.Scraper, cl *cleaner.Cleaner) gin.HandlerFunc {
 
 		jobID := "batch-" + randomID()
 		job := &models.BatchJob{
-			ID:        jobID,
-			Status:    "processing",
-			Total:     len(req.URLs),
-			Completed: 0,
-			Results:   make([]*models.ScrapeResponse, len(req.URLs)),
-			CreatedAt: time.Now().Unix(),
+			ID:            jobID,
+			Status:        "processing",
+			Total:         len(req.URLs),
+			Completed:     0,
+			Results:       make([]*models.ScrapeResponse, len(req.URLs)),
+			CreatedAt:     time.Now().Unix(),
+			WebhookURL:    req.WebhookURL,
+			WebhookSecret: req.WebhookSecret,
 		}
 		batchStore.Store(jobID, job)
 
@@ -162,6 +165,22 @@ func runBatch(sc *scraper.Scraper, cl *cleaner.Cleaner, job *models.BatchJob, re
 		"failed", failedCount,
 		"total", job.Total,
 	)
+
+	// Send webhook if configured.
+	if job.WebhookURL != "" {
+		webhook.DeliverAsync(job.WebhookURL, job.WebhookSecret, &webhook.Event{
+			Type:      "batch." + job.Status,
+			JobID:     job.ID,
+			Timestamp: time.Now().Unix(),
+			Data: models.BatchStatusResponse{
+				ID:        job.ID,
+				Status:    job.Status,
+				Completed: job.Completed,
+				Total:     job.Total,
+				Results:   job.Results,
+			},
+		})
+	}
 }
 
 // scrapeOne performs a single scrape+clean for one URL using shared batch options.

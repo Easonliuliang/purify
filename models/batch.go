@@ -7,6 +7,10 @@ type BatchRequest struct {
 
 	// Options contains shared scrape options applied to all URLs.
 	Options BatchOptions `json:"options"`
+
+	// Webhook callback URL. When set, a POST is sent on job completion.
+	WebhookURL    string `json:"webhook_url,omitempty" binding:"omitempty,url"`
+	WebhookSecret string `json:"webhook_secret,omitempty"`
 }
 
 // BatchOptions are the shared scrape settings applied to every URL in a batch.
@@ -36,10 +40,12 @@ type BatchStatusResponse struct {
 
 // BatchJob tracks an in-progress batch scrape operation.
 type BatchJob struct {
-	ID        string
-	Status    string // "processing", "completed", "failed", "partial"
-	Total     int
-	Completed int
-	Results   []*ScrapeResponse
-	CreatedAt int64 // unix timestamp
+	ID            string
+	Status        string // "processing", "completed", "failed", "partial"
+	Total         int
+	Completed     int
+	Results       []*ScrapeResponse
+	CreatedAt     int64 // unix timestamp
+	WebhookURL    string
+	WebhookSecret string
 }
