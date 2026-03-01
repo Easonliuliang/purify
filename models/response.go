@@ -36,6 +36,10 @@ type ScrapeResponse struct {
 	// Values: "hit", "miss", or empty (caching not requested).
 	CacheStatus string `json:"cache_status,omitempty"`
 
+	// EngineUsed indicates which fetch engine produced the result
+	// (e.g. "http", "rod", "rod-stealth"). Empty when multi-engine is disabled.
+	EngineUsed string `json:"engine_used,omitempty"`
+
 	// Error is populated only when Success is false.
 	Error *ErrorDetail `json:"error,omitempty"`
 }
