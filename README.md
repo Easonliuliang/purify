@@ -24,7 +24,7 @@ Web scraping for AI agents — zero dependencies, 99% token savings.
 | Binary size | **~15 MB** | ~2 GB (Docker images) | N/A |
 | Token savings | **93–99%** | ~70–80% | ~60–70% |
 | License | **Apache 2.0** | AGPL-3.0 | Partial open source |
-| MCP server | **Built-in** | Community | None |
+| MCP server | **Built-in (5 tools)** | Community | None |
 | Price (50k req/mo) | **$29/mo** | $49/mo | $49/mo |
 
 ## Quick start
@@ -68,14 +68,14 @@ Measured with [tiktoken](https://github.com/openai/tiktoken) (GPT-4 tokenizer). 
 | arXiv paper (DeepSeek-R1) | 26,684 | 3,129 | **88.3%** | 0.5s |
 | Wikipedia (LLM) | 245,276 | 76,325 | **68.9%** | 1.5s |
 | Hacker News | 11,708 | 5,572 | **52.4%** | 0.4s |
-| sspai.com (少数派) | 32,895 | 187 | **99.4%** | 1.2s |
+| sspai.com | 32,895 | 187 | **99.4%** | 1.2s |
 | Xiaohongshu (RedNote) | 158,742 | 353 | **99.8%** | 1.0s |
 
 > Low-savings sites (Hacker News, paulgraham.com) are already minimal — almost pure text with no cruft to remove. That's a feature, not a bug.
 
 ### JavaScript-heavy and login-walled sites
 
-Purify uses a real headless Chrome with stealth mode. It renders JavaScript, handles SPAs, and works with sites that block traditional scrapers.
+Purify uses a real headless Chrome with stealth mode and Chrome TLS fingerprinting. It renders JavaScript, handles SPAs, and works with sites that block traditional scrapers — including Cloudflare-protected pages.
 
 Tested on: **Xiaohongshu**, **GitHub**, **New York Times**, **Anthropic Docs**, **arXiv**, **BBC News**, **Hacker News**, **Next.js apps**, and more.
 
@@ -88,15 +88,27 @@ Tested on: **Xiaohongshu**, **GitHub**, **New York Times**, **Anthropic Docs**, 
 
 ## MCP server
 
-Purify includes a built-in MCP server. Connect Claude Desktop, Cursor, or any MCP-compatible client with one config file:
+Purify includes a built-in MCP server with **5 tools**:
+
+| Tool | Description |
+|---|---|
+| `scrape_url` | Scrape a single page, return clean content |
+| `batch_scrape` | Scrape multiple URLs in parallel |
+| `crawl_site` | Recursively crawl a website (BFS) |
+| `map_site` | Discover all URLs on a site |
+| `extract_data` | Extract structured data with LLM (BYOK) |
+
+### Setup
+
+Add to your Claude Desktop config (`claude_desktop_config.json`):
 
 ```json
 {
   "mcpServers": {
     "purify": {
-      "command": "npx",
-      "args": ["-y", "purify-mcp"],
+      "command": "purify-mcp",
       "env": {
+        "PURIFY_API_URL": "https://purify.verifly.pro",
         "PURIFY_API_KEY": "your-api-key"
       }
     }
@@ -104,17 +116,18 @@ Purify includes a built-in MCP server. Connect Claude Desktop, Cursor, or any MC
 }
 ```
 
-For self-hosted instances:
+For self-hosted instances, set `PURIFY_API_URL` to `http://localhost:8080`.
 
-```json
-"PURIFY_BASE_URL": "http://localhost:8080"
-```
-
-Then ask Claude: *"Scrape https://paulgraham.com/greatwork.html and summarize it."*
+Then ask Claude:
+- *"Scrape https://paulgraham.com/greatwork.html and summarize it."*
+- *"Crawl the Next.js docs site, max 20 pages."*
+- *"Extract the product name and price from this page: ..."*
 
 ## API
 
 ### POST /api/v1/scrape
+
+Scrape a single page and return cleaned content. Supports JSON response or SSE streaming.
 
 ```json
 {
@@ -127,22 +140,38 @@ Then ask Claude: *"Scrape https://paulgraham.com/greatwork.html and summarize it
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `url` | string | *required* | Target URL |
-| `output_format` | string | `markdown` | `markdown`, `html`, or `text` |
-| `extract_mode` | string | `readability` | `readability` (main content) or `raw` (full page) |
+| `output_format` | string | `markdown` | `markdown`, `html`, `text`, or `markdown_citations` |
+| `extract_mode` | string | `readability` | `readability`, `raw`, `pruning`, or `auto` |
 | `timeout` | int | `30` | Timeout in seconds (1–120) |
 | `stealth` | bool | `false` | Anti-detection mode |
+| `headers` | object | — | Custom HTTP headers |
+| `cookies` | array | — | Cookies to set before navigation |
+| `actions` | array | — | Browser interactions (click, scroll, wait, etc.) |
+| `include_tags` | array | — | CSS selectors to keep |
+| `exclude_tags` | array | — | CSS selectors to remove |
+| `css_selector` | string | — | Extract only matching elements |
+| `max_age` | int | `0` | Cache max age in ms (0 = no cache) |
 
 Response:
 
 ```json
 {
   "success": true,
+  "status_code": 200,
+  "final_url": "https://example.com/article",
   "content": "# Article Title\n\nClean markdown content...",
   "metadata": {
     "title": "Article Title",
     "author": "Author Name",
-    "source_url": "https://example.com/article"
+    "language": "en",
+    "source_url": "https://example.com/article",
+    "fetch_method": "http"
   },
+  "links": {
+    "internal": [{"href": "/about", "text": "About"}],
+    "external": [{"href": "https://github.com/...", "text": "GitHub"}]
+  },
+  "images": [{"src": "https://example.com/hero.jpg", "alt": "Hero"}],
   "tokens": {
     "original_estimate": 32895,
     "cleaned_estimate": 187,
@@ -152,13 +181,80 @@ Response:
     "total_ms": 1172,
     "navigation_ms": 1162,
     "cleaning_ms": 9
-  }
+  },
+  "engine_used": "http"
 }
 ```
 
-### Structured extraction
+#### SSE streaming
 
-Send a JSON schema, get structured data back. Uses your own LLM key (BYOK).
+Add `Accept: text/event-stream` header to receive Server-Sent Events instead of JSON:
+
+```bash
+curl -X POST https://purify.verifly.pro/api/v1/scrape \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -H "Accept: text/event-stream" \
+  -d '{"url": "https://example.com"}'
+```
+
+Events: `scrape.started` → `scrape.navigated` → `scrape.completed` (or `scrape.error`).
+
+#### Citation format
+
+Use `"output_format": "markdown_citations"` to convert inline links to academic-style references:
+
+```markdown
+See [Google][1] and [GitHub][2]
+
+---
+[1]: https://google.com
+[2]: https://github.com
+```
+
+### POST /api/v1/batch/scrape
+
+Scrape multiple URLs in parallel. Returns a job ID for async polling.
+
+```json
+{
+  "urls": ["https://a.com", "https://b.com", "https://c.com"],
+  "options": {"output_format": "markdown"},
+  "webhook_url": "https://your-server.com/callback",
+  "webhook_secret": "your-hmac-secret"
+}
+```
+
+Poll status: `GET /api/v1/batch/:id`
+
+### POST /api/v1/crawl
+
+Recursively crawl a website starting from a URL.
+
+```json
+{
+  "url": "https://docs.example.com",
+  "max_depth": 3,
+  "max_pages": 100,
+  "scope": "subdomain",
+  "webhook_url": "https://your-server.com/callback",
+  "webhook_secret": "your-hmac-secret"
+}
+```
+
+Poll status: `GET /api/v1/crawl/:id`
+
+### POST /api/v1/map
+
+Discover all URLs on a site without scraping content.
+
+```json
+{"url": "https://example.com"}
+```
+
+### POST /api/v1/extract
+
+Structured data extraction using your own LLM key (BYOK).
 
 ```bash
 curl -X POST https://purify.verifly.pro/api/v1/extract \
@@ -173,6 +269,17 @@ curl -X POST https://purify.verifly.pro/api/v1/extract \
     },
     "llm_api_key": "your-openai-key"
   }'
+```
+
+### Webhook callbacks
+
+Batch and Crawl endpoints support webhook notifications. When a job completes, Purify sends a POST request to your `webhook_url` with HMAC-SHA256 signature in the `X-Purify-Signature` header.
+
+Events: `batch.completed`, `crawl.page`, `crawl.completed`, `crawl.failed`
+
+Verify the signature:
+```
+HMAC-SHA256(webhook_secret, request_body) == X-Purify-Signature (sha256=<hex>)
 ```
 
 ### GET /api/v1/health
@@ -194,6 +301,8 @@ All configuration via environment variables:
 | `PURIFY_RATE_RPS` | `5` | Rate limit (requests/sec/key) |
 | `PURIFY_RATE_BURST` | `10` | Rate limit burst |
 | `PURIFY_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
+| `PURIFY_MULTI_ENGINE` | `true` | Enable multi-engine racing |
+| `PURIFY_ESCALATION_DELAYS` | `0s,2s,5s` | Engine start delays (http, rod, rod-stealth) |
 
 ## Self-hosting
 
@@ -218,18 +327,33 @@ Runs on any $5/month VPS. No usage limits when self-hosted.
 ## Architecture
 
 ```
-Client → HTTP API (Gin) → Headless Chrome (Rod) → Raw HTML
-                                                      ↓
-                                              Readability extraction
-                                                      ↓
-                                              Markdown conversion
-                                                      ↓
-                                              Clean content + metadata
+Client request
+    ↓
+HTTP API (Gin) — auth, rate limit, SSE support
+    ↓
+Scraper — actions, stealth, resource blocking
+    ↓
+Multi-engine Dispatcher (racing)
+    ├── HTTP Engine (Chrome TLS fingerprint via utls)  ← fastest
+    ├── Rod Engine (headless Chrome)
+    └── Rod Stealth Engine (anti-detection)
+    ↓
+Domain Memory — remembers best engine per domain
+    ↓
+Cleaner pipeline
+    ├── Readability / Pruning / Auto extraction
+    ├── Markdown / HTML / Text / Citations output
+    └── Links, images, OG metadata extraction
+    ↓
+Response — content + tokens + timing + cache
+    ↓
+Optional: Webhook callback (HMAC-SHA256 signed)
 ```
 
-- **Scraper** — Rod-based headless Chrome with page pool, resource blocking (images/CSS/fonts), and stealth mode
-- **Cleaner** — Two-stage pipeline: Mozilla Readability for content extraction, html-to-markdown for format conversion
-- **API** — Gin with API key auth, per-key rate limiting, health checks, and graceful shutdown
+- **Multi-engine racing** — HTTP, Rod, and Rod-stealth engines race in parallel with staged escalation. First success wins. Domain memory skips the race on repeat visits.
+- **Chrome TLS fingerprint** — HTTP engine uses [utls](https://github.com/refraction-networking/utls) to mimic Chrome's TLS ClientHello, bypassing basic bot detection without a browser.
+- **Adaptive pool** — Browser page pool auto-scales based on memory pressure and load.
+- **Dual extraction** — Readability + scoring-based pruning run concurrently; `auto` mode picks the better result.
 
 ## Pricing
 
