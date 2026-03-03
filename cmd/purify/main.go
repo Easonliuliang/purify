@@ -66,7 +66,7 @@ func main() {
 			}, nil
 		}
 
-		httpEngine := engine.NewHTTPEngine()
+		httpEngine := engine.NewHTTPEngine(cfg.Browser.DefaultProxy)
 		rodEngine := engine.NewRodEngine(rodFetch, false)
 		rodStealthEngine := engine.NewRodEngine(rodFetch, true)
 

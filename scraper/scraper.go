@@ -2,6 +2,7 @@ package scraper
 
 import (
 	"log/slog"
+	"net/url"
 	"sync/atomic"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/use-agent/purify/config"
 	"github.com/use-agent/purify/engine"
 	"github.com/use-agent/purify/models"
+	"github.com/use-agent/purify/proxy"
 )
 
 // Scraper manages the global browser lifecycle and the page pool.
@@ -24,10 +26,39 @@ type Scraper struct {
 	activePages atomic.Int32
 	startTime   time.Time
 	dispatcher  *engine.Dispatcher
+	relay       *proxy.Relay
 }
 
 // NewScraper launches a headless browser and initialises the reusable page pool.
 func NewScraper(browserCfg config.BrowserConfig, scraperCfg config.ScraperConfig) (*Scraper, error) {
+	// ── Proxy strategy ──────────────────────────────────────────────
+	// When the proxy requires auth (user:pass in URL), Chrome cannot handle
+	// it directly (HandleAuth conflicts with HijackRequests, SOCKS5 auth
+	// is unsupported). Solution: start a local SOCKS5 relay (no auth) that
+	// forwards to the external proxy (with auth). Chrome connects to the
+	// relay, which handles authentication transparently.
+	var relay *proxy.Relay
+	proxyForChrome := ""
+
+	if browserCfg.DefaultProxy != "" {
+		if u, err := url.Parse(browserCfg.DefaultProxy); err == nil && u.User != nil {
+			// Proxy has auth → start local relay for Chrome.
+			r, err := proxy.StartRelay(browserCfg.DefaultProxy)
+			if err != nil {
+				slog.Warn("failed to start proxy relay, Chrome will go direct",
+					"error", err)
+			} else {
+				relay = r
+				proxyForChrome = "socks5://127.0.0.1:" + addrPort(r.Addr())
+				slog.Info("Chrome will use proxy via local relay",
+					"relay", r.Addr())
+			}
+		} else {
+			// No auth: Chrome can use it directly.
+			proxyForChrome = browserCfg.DefaultProxy
+		}
+	}
+
 	l := launcher.New().
 		Headless(browserCfg.Headless).
 		NoSandbox(browserCfg.NoSandbox)
@@ -35,8 +66,8 @@ func NewScraper(browserCfg config.BrowserConfig, scraperCfg config.ScraperConfig
 	if browserCfg.BrowserBin != "" {
 		l = l.Bin(browserCfg.BrowserBin)
 	}
-	if browserCfg.DefaultProxy != "" {
-		l = l.Proxy(browserCfg.DefaultProxy)
+	if proxyForChrome != "" {
+		l = l.Proxy(proxyForChrome)
 	}
 
 	// ── Stealth flags ────────────────────────────────────────────────
@@ -84,7 +115,18 @@ func NewScraper(browserCfg config.BrowserConfig, scraperCfg config.ScraperConfig
 		scraperCfg:  scraperCfg,
 		httpFetcher: newHTTPFetcher(browserCfg.DefaultProxy),
 		startTime:   time.Now(),
+		relay:       relay,
 	}, nil
+}
+
+// addrPort extracts the port from a "host:port" address string.
+func addrPort(addr string) string {
+	for i := len(addr) - 1; i >= 0; i-- {
+		if addr[i] == ':' {
+			return addr[i+1:]
+		}
+	}
+	return addr
 }
 
 // SetDispatcher sets the multi-engine dispatcher. When set, DoScrape will
@@ -110,5 +152,8 @@ func (s *Scraper) Close() {
 	})
 	slog.Info("scraper shutting down: closing browser")
 	s.browser.MustClose()
+	if s.relay != nil {
+		s.relay.Close()
+	}
 	slog.Info("scraper shutdown complete")
 }
