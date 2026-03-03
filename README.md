@@ -86,7 +86,7 @@ curl -s -X POST https://purify.verifly.pro/api/v1/scrape \
   -d '{"url": "https://news.ycombinator.com"}' | jq .content
 ```
 
-Get a free API key at [purify.verifly.pro](https://purify.verifly.pro) — 500 requests/month, no credit card.
+Get a free API key at [purify.verifly.pro](https://purify.verifly.pro) — 1,000 requests/month, no credit card.
 
 ## Token savings — real numbers
 
@@ -355,7 +355,7 @@ Runs on any $5/month VPS. No usage limits when self-hosted.
 | | Free | Pro |
 |---|---|---|
 | Price | $0/mo | $29/mo |
-| Requests | 500/mo | 50,000/mo |
+| Requests | 1,000/mo | 50,000/mo |
 | Concurrent | 2 | 10 |
 | MCP server | ✓ | ✓ |
 | Structured extraction | ✓ | ✓ |
