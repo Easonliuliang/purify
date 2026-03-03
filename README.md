@@ -2,45 +2,79 @@
 
 # Purify
 
-**The single-binary alternative to Firecrawl.**<br/>
-Web scraping for AI agents — zero dependencies, 99% token savings.
+**Web Scraping API for AI Agents.**
+One binary. Zero dependencies. Built-in MCP server.
+
+The Go alternative to Firecrawl / Crawl4AI — no Python, no Node.js, no Redis. Just `docker compose up` and go.
 
 <img src="https://img.shields.io/github/license/Easonliuliang/purify?style=flat-square&color=22C55E" alt="License" />
 <img src="https://img.shields.io/github/stars/Easonliuliang/purify?style=flat-square&color=22C55E" alt="Stars" />
 <img src="https://img.shields.io/github/v/release/Easonliuliang/purify?style=flat-square&color=22C55E" alt="Release" />
 
-[Get Free API Key](https://purify.verifly.pro) · [API Docs](#api) · [MCP Server](#mcp-server) · [Self-Host](#quick-start)
+[Get Free API Key](https://purify.verifly.pro) · [API Docs](#api) · [MCP Server](#mcp-server) · [Self-Host](#self-hosting)
 
 </div>
 
 ---
 
-## Why Purify?
+## See it work
 
-|  | Purify | Firecrawl | Jina Reader |
-|---|---|---|---|
-| Dependencies | **None** | Redis + Playwright + PostgreSQL | Firebase + proprietary |
-| Deployment | `./purify` | `docker compose` (5 containers) | No self-host docs |
-| Binary size | **~15 MB** | ~2 GB (Docker images) | N/A |
-| Token savings | **93–99%** | ~70–80% | ~60–70% |
-| License | **Apache 2.0** | AGPL-3.0 | Partial open source |
-| MCP server | **Built-in (5 tools)** | Community | None |
-| Price (50k req/mo) | **$29/mo** | $49/mo | $49/mo |
+```bash
+# Start Purify
+docker compose up -d
+
+# Scrape a page
+curl -s -X POST http://localhost:8080/api/v1/scrape \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://news.ycombinator.com"}' | jq .
+```
+
+```json
+{
+  "success": true,
+  "content": "# Hacker News\n\n1. Show HN: ...",
+  "tokens": {
+    "original_estimate": 11708,
+    "cleaned_estimate": 5572,
+    "savings_percent": 52.4
+  },
+  "timing": {
+    "total_ms": 400
+  }
+}
+```
+
+Two commands. Clean Markdown back in under a second.
+
+---
+
+## How it compares
+
+| | Purify | Firecrawl | Crawl4AI | Jina Reader |
+|---|---|---|---|---|
+| Language | **Go** | TypeScript | Python | N/A (cloud) |
+| Self-host | **Single binary** | 5+ containers (Redis, PG, Playwright…) | pip + Playwright | No self-host docs |
+| MCP server | **Built-in (5 tools)** | Community-maintained | No | No |
+| Token savings | **52–99%** | ~70–80% | ~75–85% | ~60–70% |
+| Recursive crawling | Yes | Yes | Yes | No |
+| Batch scrape | Yes | Yes | No | No |
+| License | **Apache 2.0** | AGPL-3.0 | Apache 2.0 | Partial open source |
+| Price (50k req/mo) | **$29/mo** | $49/mo | Free (local) | $49/mo |
 
 ## Quick start
 
-**Option A: Build from source**
+**Option A: Docker**
+
+```bash
+docker compose up -d
+```
+
+**Option B: Build from source**
 
 ```bash
 git clone https://github.com/Easonliuliang/purify.git
 cd purify && make build
 PURIFY_AUTH_ENABLED=false ./bin/purify
-```
-
-**Option B: Docker**
-
-```bash
-docker compose up -d
 ```
 
 **Option C: Hosted API (no setup)**
@@ -72,12 +106,6 @@ Measured with [tiktoken](https://github.com/openai/tiktoken) (GPT-4 tokenizer). 
 | Xiaohongshu (RedNote) | 158,742 | 353 | **99.8%** | 1.0s |
 
 > Low-savings sites (Hacker News, paulgraham.com) are already minimal — almost pure text with no cruft to remove. That's a feature, not a bug.
-
-### JavaScript-heavy and login-walled sites
-
-Purify uses a real headless Chrome with stealth mode and Chrome TLS fingerprinting. It renders JavaScript, handles SPAs, and works with sites that block traditional scrapers — including Cloudflare-protected pages.
-
-Tested on: **Xiaohongshu**, **GitHub**, **New York Times**, **Anthropic Docs**, **arXiv**, **BBC News**, **Hacker News**, **Next.js apps**, and more.
 
 ## Use cases
 
@@ -284,7 +312,7 @@ HMAC-SHA256(webhook_secret, request_body) == X-Purify-Signature (sha256=<hex>)
 
 ### GET /api/v1/health
 
-Returns server status, uptime, and browser pool stats.
+Returns server status and uptime.
 
 ## Configuration
 
@@ -301,8 +329,6 @@ All configuration via environment variables:
 | `PURIFY_RATE_RPS` | `5` | Rate limit (requests/sec/key) |
 | `PURIFY_RATE_BURST` | `10` | Rate limit burst |
 | `PURIFY_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
-| `PURIFY_MULTI_ENGINE` | `true` | Enable multi-engine racing |
-| `PURIFY_ESCALATION_DELAYS` | `0s,2s,5s` | Engine start delays (http, rod, rod-stealth) |
 
 ## Self-hosting
 
@@ -323,37 +349,6 @@ Runs on any $5/month VPS. No usage limits when self-hosted.
 - Any Linux, macOS, or Windows machine
 - ~15 MB disk space
 - ~30 MB RAM idle
-
-## Architecture
-
-```
-Client request
-    ↓
-HTTP API (Gin) — auth, rate limit, SSE support
-    ↓
-Scraper — actions, stealth, resource blocking
-    ↓
-Multi-engine Dispatcher (racing)
-    ├── HTTP Engine (Chrome TLS fingerprint via utls)  ← fastest
-    ├── Rod Engine (headless Chrome)
-    └── Rod Stealth Engine (anti-detection)
-    ↓
-Domain Memory — remembers best engine per domain
-    ↓
-Cleaner pipeline
-    ├── Readability / Pruning / Auto extraction
-    ├── Markdown / HTML / Text / Citations output
-    └── Links, images, OG metadata extraction
-    ↓
-Response — content + tokens + timing + cache
-    ↓
-Optional: Webhook callback (HMAC-SHA256 signed)
-```
-
-- **Multi-engine racing** — HTTP, Rod, and Rod-stealth engines race in parallel with staged escalation. First success wins. Domain memory skips the race on repeat visits.
-- **Chrome TLS fingerprint** — HTTP engine uses [utls](https://github.com/refraction-networking/utls) to mimic Chrome's TLS ClientHello, bypassing basic bot detection without a browser.
-- **Adaptive pool** — Browser page pool auto-scales based on memory pressure and load.
-- **Dual extraction** — Readability + scoring-based pruning run concurrently; `auto` mode picks the better result.
 
 ## Pricing
 
